@@ -15,6 +15,7 @@ const JOIN_BLEND_HANDLE = 20;
 const CONNECT_SNAP_DIST = 24;
 const CONNECT_ANGLE_TOL = 0.55;
 const GRID = 20;
+const TRAFFIC_LIGHT_GREEN_TIME = 5.5;
 
 const COLORS = {
   bg: 0xd9e5db,
@@ -25,6 +26,9 @@ const COLORS = {
   selected: 0xf0b429,
   connectorOpen: 0xd96a6a,
   connectorLinked: 0x2ea866,
+  trafficGreen: 0x35c759,
+  trafficRed: 0xff453a,
+  trafficPole: 0x1f252b,
   carStroke: 0x172028,
   debugLane: 0x0a84ff,
 };
@@ -51,6 +55,19 @@ const PIECES = {
     ],
     pickRadius: 130,
     overlapRadius: 50,
+  },
+  traffic_light_cross: {
+    id: "traffic_light_cross",
+    label: "Cruce semaforizado",
+    isTrafficLightCross: true,
+    connectors: [
+      { x: 100, y: 0, dir: 0 },
+      { x: 0, y: 100, dir: Math.PI / 2 },
+      { x: -100, y: 0, dir: Math.PI },
+      { x: 0, y: -100, dir: -Math.PI / 2 },
+    ],
+    pickRadius: 132,
+    overlapRadius: 64,
   },
   roundabout_s: makeRoundaboutType("roundabout_s", 52, "Rotonda S"),
   roundabout_m: makeRoundaboutType("roundabout_m", 72, "Rotonda M"),
@@ -96,6 +113,7 @@ const state = {
   cars: [],
   pendingSpawns: 0,
   debugLanes: true,
+  signalTime: 0,
 };
 
 const app = new PIXI.Application();
@@ -496,6 +514,13 @@ function pointInPieceRoad(piece, worldPoint, margin = 2) {
     return false;
   }
 
+  if (piece.type === "traffic_light_cross") {
+    return (
+      pointSegmentDistance(p.x, p.y, -100, 0, 100, 0) <= half ||
+      pointSegmentDistance(p.x, p.y, 0, -100, 0, 100) <= half
+    );
+  }
+
   const radii = getRoundaboutLaneRadii(def);
   const innerEdge = radii.inner - LANE_WIDTH * 0.5;
   const outerEdge = radii.outer + LANE_WIDTH * 0.5;
@@ -532,6 +557,13 @@ function samplePieceRoadPoints(piece) {
       for (const r of rs) {
         local.push({ x: def.center.x + Math.cos(a) * r, y: def.center.y + Math.sin(a) * r });
       }
+    }
+  } else if (piece.type === "traffic_light_cross") {
+    for (let x = -100; x <= 100; x += 18) {
+      local.push({ x, y: -half }, { x, y: 0 }, { x, y: half });
+    }
+    for (let y = -100; y <= 100; y += 18) {
+      local.push({ x: -half, y }, { x: 0, y }, { x: half, y });
     }
   } else {
     const radii = getRoundaboutLaneRadii(def);
@@ -721,6 +753,42 @@ function rightNormalForHeading(heading) {
   return { x: -Math.sin(heading), y: Math.cos(heading) };
 }
 
+function leftNormalForHeading(heading) {
+  return { x: Math.sin(heading), y: -Math.cos(heading) };
+}
+
+function lineIntersection(p0, d0, p1, d1) {
+  const det = d0.x * d1.y - d0.y * d1.x;
+  if (Math.abs(det) < 1e-6) return null;
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+  const t = (dx * d1.y - dy * d1.x) / det;
+  return { x: p0.x + d0.x * t, y: p0.y + d0.y * t };
+}
+
+function buildArcWorld(center, radius, startAngle, endAngle, turnSign) {
+  let delta = normalizeAngle(endAngle - startAngle);
+  if (turnSign > 0 && delta < 0) delta += Math.PI * 2;
+  if (turnSign < 0 && delta > 0) delta -= Math.PI * 2;
+  const steps = Math.max(3, Math.ceil(Math.abs(delta) / 0.12));
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = startAngle + (delta * i) / steps;
+    pts.push({ x: center.x + Math.cos(a) * radius, y: center.y + Math.sin(a) * radius });
+  }
+  return pts;
+}
+
+function buildArcWorldByDelta(center, radius, startAngle, delta) {
+  const steps = Math.max(3, Math.ceil(Math.abs(delta) / 0.12));
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = startAngle + (delta * i) / steps;
+    pts.push({ x: center.x + Math.cos(a) * radius, y: center.y + Math.sin(a) * radius });
+  }
+  return pts;
+}
+
 function buildBezierPolyline(p0, h0, p1, h1, handleLength, steps = 10) {
   const c1 = {
     x: p0.x + Math.cos(h0) * handleLength,
@@ -766,6 +834,62 @@ function getRoundaboutLaneRadii(def) {
   const divider = (inner + outer) * 0.5;
   const outerEdge = outer + LANE_WIDTH * 0.5;
   return { inner, outer, divider, outerEdge };
+}
+
+function getTrafficLightPhase(piece) {
+  const cycle = TRAFFIC_LIGHT_GREEN_TIME * 2;
+  const t = (state.signalTime + piece.id * 0.7) % cycle;
+  return t < TRAFFIC_LIGHT_GREEN_TIME ? "ns" : "ew";
+}
+
+function isNorthSouthConnector(piece, connectorIdx) {
+  const def = PIECES[piece.type];
+  const c = def.connectors[connectorIdx];
+  const worldDir = normalizeAngle(c.dir + piece.rot);
+  return Math.abs(Math.cos(worldDir)) < 0.5;
+}
+
+function isTrafficLightGreen(piece, connectorIdx) {
+  const phase = getTrafficLightPhase(piece);
+  const isNs = isNorthSouthConnector(piece, connectorIdx);
+  return (phase === "ns" && isNs) || (phase === "ew" && !isNs);
+}
+
+function buildTrafficLightPath(piece, fromConnectorIdx, toConnectorIdx) {
+  const headingIn = normalizeAngle(PIECES[piece.type].connectors[fromConnectorIdx].dir + piece.rot + Math.PI);
+  const headingOut = normalizeAngle(PIECES[piece.type].connectors[toConnectorIdx].dir + piece.rot);
+  const p0 = connectorLanePointWorld(piece, fromConnectorIdx, headingIn);
+  const p1 = connectorLanePointWorld(piece, toConnectorIdx, headingOut);
+
+  const diff = Math.abs(normalizeAngle(headingOut - headingIn));
+  if (Math.abs(diff - Math.PI) < 0.2) {
+    return [p0, p1];
+  }
+  const d0 = { x: Math.cos(headingIn), y: Math.sin(headingIn) };
+  const d1 = { x: Math.cos(headingOut), y: Math.sin(headingOut) };
+  const corner = lineIntersection(p0, d0, p1, { x: -d1.x, y: -d1.y });
+  if (!corner) {
+    return buildBezierPolyline(p0, headingIn, p1, headingOut, 24, 12);
+  }
+
+  const inAvail = (corner.x - p0.x) * d0.x + (corner.y - p0.y) * d0.y;
+  const outAvail = (p1.x - corner.x) * d1.x + (p1.y - corner.y) * d1.y;
+  const maxRadius = Math.min(inAvail - 6, outAvail - 6, LANE_WIDTH * 0.9);
+  const radius = Math.max(8, maxRadius);
+  if (!(inAvail > 12 && outAvail > 12 && maxRadius > 7)) {
+    return buildBezierPolyline(p0, headingIn, p1, headingOut, 24, 12);
+  }
+
+  const pA = { x: corner.x - d0.x * radius, y: corner.y - d0.y * radius };
+  const pB = { x: corner.x + d1.x * radius, y: corner.y + d1.y * radius };
+  const turnDelta = normalizeAngle(headingOut - headingIn);
+  const turnSign = Math.sign(turnDelta) || 1;
+  const normal = turnSign > 0 ? leftNormalForHeading(headingIn) : rightNormalForHeading(headingIn);
+  const arcCenter = { x: pA.x + normal.x * radius, y: pA.y + normal.y * radius };
+  const a0 = Math.atan2(pA.y - arcCenter.y, pA.x - arcCenter.x);
+  const arc = buildArcWorldByDelta(arcCenter, radius, a0, turnDelta);
+
+  return [p0, pA, ...arc.slice(1, -1), pB, p1];
 }
 
 function buildArc(radius, startAngle, endAngle, direction = -1) {
@@ -854,6 +978,13 @@ function buildRoundaboutDeadEndTurnaround(piece, connectorIdx) {
 
 function buildTraversal(piece, fromConnectorIdx) {
   const def = PIECES[piece.type];
+  if (piece.type === "traffic_light_cross") {
+    const exits = [0, 1, 2, 3].filter((i) => i !== fromConnectorIdx);
+    const toConnectorIdx = exits[Math.floor(Math.random() * exits.length)];
+    const worldPoints = buildTrafficLightPath(piece, fromConnectorIdx, toConnectorIdx);
+    return { path: polylineMetrics(worldPoints), toConnectorIdx };
+  }
+
   if (!def.isRoundabout) {
     const toConnectorIdx = fromConnectorIdx === 0 ? 1 : 0;
     const c0 = def.connectors[fromConnectorIdx];
@@ -931,6 +1062,11 @@ function roundaboutExitOrdinal(fromConnectorIdx, toConnectorIdx) {
   return steps === 0 ? 4 : steps;
 }
 
+function junctionExitOrdinal(fromConnectorIdx, toConnectorIdx) {
+  // 1=derecha, 2=frente, 3=izquierda respecto a la entrada.
+  return (fromConnectorIdx - toConnectorIdx + 4) % 4;
+}
+
 function isRoundaboutEntryBlocked(roundPiece, entryIdx) {
   const def = PIECES[roundPiece.type];
   const radii = getRoundaboutLaneRadii(def);
@@ -969,7 +1105,9 @@ function assignTraversal(car, nextPieceId, fromConnectorIdx) {
   car.laneChoice = traversal.laneChoice || "right";
   car.exitOrdinal = PIECES[piece.type].isRoundabout
     ? roundaboutExitOrdinal(fromConnectorIdx, traversal.toConnectorIdx)
-    : null;
+    : PIECES[piece.type].isTrafficLightCross
+      ? junctionExitOrdinal(fromConnectorIdx, traversal.toConnectorIdx)
+      : null;
   car.s = Math.min(JOIN_ENTRY_OFFSET, Math.max(0, car.path.length * 0.25));
   car.joinGrace = JOIN_GRACE_TIME;
   car.waiting = false;
@@ -996,7 +1134,9 @@ function assignTraversalWithBlend(car, nextPiece, fromConnectorIdx) {
   car.laneChoice = nextTraversal.laneChoice || "right";
   car.exitOrdinal = PIECES[nextPiece.type].isRoundabout
     ? roundaboutExitOrdinal(fromConnectorIdx, nextTraversal.toConnectorIdx)
-    : null;
+    : PIECES[nextPiece.type].isTrafficLightCross
+      ? junctionExitOrdinal(fromConnectorIdx, nextTraversal.toConnectorIdx)
+      : null;
   car.s = Math.min(JOIN_ENTRY_OFFSET, Math.max(0, car.path.length * 0.25));
   car.joinGrace = JOIN_GRACE_TIME;
   car.waiting = false;
@@ -1135,12 +1275,14 @@ function spawnCar() {
 
 function updateCars(dt) {
   if (state.networkDirty) rebuildNetwork();
+  state.signalTime += dt;
 
   for (const car of state.cars) {
     car.joinGrace = Math.max(0, (car.joinGrace || 0) - dt);
     let obstacleDist = Infinity;
     const myPos = pointAtPath(car.path, car.s);
     const myHeading = headingAtPath(car.path, car.s);
+    const remToEnd = car.path.length - car.s;
 
     for (const other of state.cars) {
       if (other === car) continue;
@@ -1162,6 +1304,17 @@ function updateCars(dt) {
 
     let target = car.desiredSpeed;
     if (car.joinGrace > 0) target = Math.max(target, 28);
+    if (remToEnd < 30) {
+      const currentKey = `${car.pieceId}:${car.toConnectorIdx}`;
+      const nextKey = state.connections.get(currentKey);
+      if (nextKey) {
+        const next = parseConnectorKey(nextKey);
+        const nextPiece = pieceById(next.pieceId);
+        if (nextPiece && PIECES[nextPiece.type].isTrafficLightCross && !isTrafficLightGreen(nextPiece, next.connectorIndex)) {
+          target = 0;
+        }
+      }
+    }
     if (obstacleDist < 24) target = 0;
     else if (obstacleDist < 40) target *= 0.35;
 
@@ -1206,6 +1359,12 @@ function updateCars(dt) {
         const nextPiece = pieceById(next.pieceId);
         if (!nextPiece) {
           car.remove = true;
+          break;
+        }
+
+        if (PIECES[nextPiece.type].isTrafficLightCross && !isTrafficLightGreen(nextPiece, next.connectorIndex)) {
+          car.s = Math.max(0, car.path.length - 1);
+          car.speed = 0;
           break;
         }
 
@@ -1322,6 +1481,34 @@ function drawPiece(g, piece) {
       color: COLORS.divider,
       cap: "round",
     });
+  } else if (piece.type === "traffic_light_cross") {
+    const dx = Math.cos(piece.rot);
+    const dy = Math.sin(piece.rot);
+    const ux = -dy;
+    const uy = dx;
+
+    strokeRoadPath(g, () => {
+      g.moveTo(piece.x - dx * 100, piece.y - dy * 100);
+      g.lineTo(piece.x + dx * 100, piece.y + dy * 100);
+    });
+    strokeRoadPath(g, () => {
+      g.moveTo(piece.x - ux * 100, piece.y - uy * 100);
+      g.lineTo(piece.x + ux * 100, piece.y + uy * 100);
+    });
+
+    const worldConnectors = getWorldConnectors(piece);
+    for (const c of worldConnectors) {
+      const headingIn = normalizeAngle(c.dir + Math.PI);
+      const normal = rightNormalForHeading(headingIn);
+      const lampPos = {
+        x: c.x + Math.cos(headingIn) * 18 + normal.x * 9,
+        y: c.y + Math.sin(headingIn) * 18 + normal.y * 9,
+      };
+      g.circle(lampPos.x, lampPos.y, 4.6);
+      g.fill(COLORS.trafficPole);
+      g.circle(lampPos.x, lampPos.y, 3.1);
+      g.fill(isTrafficLightGreen(piece, c.connectorIndex) ? COLORS.trafficGreen : COLORS.trafficRed);
+    }
   } else {
     const radii = getRoundaboutLaneRadii(def);
 
@@ -1418,6 +1605,14 @@ function drawDebugLanes() {
       const end = piece.rot;
       strokeArcPath(debugGraphics, center.x, center.y, def.radius - LANE_OFFSET, start, end, true, arcStyle);
       strokeArcPath(debugGraphics, center.x, center.y, def.radius + LANE_OFFSET, start, end, true, arcStyle);
+    } else if (piece.type === "traffic_light_cross") {
+      for (let from = 0; from < 4; from++) {
+        for (let to = 0; to < 4; to++) {
+          if (to === from) continue;
+          const p = buildTrafficLightPath(piece, from, to);
+          strokePolyline(debugGraphics, p, { width: 1.5 / state.view.zoom, color: COLORS.debugLane, alpha: 0.7 });
+        }
+      }
     } else {
       const radii = getRoundaboutLaneRadii(def);
       strokeArcPath(debugGraphics, piece.x, piece.y, radii.inner, 0, Math.PI * 2, false, arcStyle);
@@ -1507,7 +1702,7 @@ function drawCars() {
 
     if (state.debugLanes) {
       const piece = pieceById(car.pieceId);
-      if (piece && PIECES[piece.type].isRoundabout) {
+      if (piece && (PIECES[piece.type].isRoundabout || PIECES[piece.type].isTrafficLightCross)) {
         let label = carDebugLabels.get(car.id);
         if (!label) {
           label = new PIXI.Text("", {
@@ -1522,7 +1717,10 @@ function drawCars() {
           carDebugLabels.set(car.id, label);
           carLabelsContainer.addChild(label);
         }
-        label.text = `${car.exitOrdinal || roundaboutExitOrdinal(car.fromConnectorIdx, car.toConnectorIdx)}`;
+        const fallbackOrdinal = PIECES[piece.type].isRoundabout
+          ? roundaboutExitOrdinal(car.fromConnectorIdx, car.toConnectorIdx)
+          : junctionExitOrdinal(car.fromConnectorIdx, car.toConnectorIdx);
+        label.text = `${car.exitOrdinal || fallbackOrdinal}`;
         label.position.set(p.x, p.y - 12 / state.view.zoom);
         label.scale.set(1 / state.view.zoom);
         label.visible = true;
