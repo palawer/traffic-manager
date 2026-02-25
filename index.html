@@ -14,12 +14,43 @@
       <section>
         <h2>Piezas</h2>
         <div class="palette" id="palette">
-          <button data-tool="select" class="active">Seleccionar</button>
-          <button data-piece="straight">Recta</button>
-          <button data-piece="curve">Curva 90º</button>
-          <button data-piece="roundabout_s">Rotonda S</button>
-          <button data-piece="roundabout_m">Rotonda M</button>
-          <button data-piece="roundabout_l">Rotonda L</button>
+          <button class="tool-btn active" data-tool="select" title="Seleccionar">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 4 L17 12 L11 13 L13 20 L10 21 L8 14 L5 16 Z"></path>
+            </svg>
+          </button>
+          <button class="tool-btn" data-piece="straight" title="Recta">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 12 H21"></path>
+              <path d="M3 9 H21"></path>
+              <path d="M3 15 H21"></path>
+            </svg>
+          </button>
+          <button class="tool-btn" data-piece="curve" title="Curva 90º">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 18 A14 14 0 0 1 18 4"></path>
+              <path d="M4 15 A11 11 0 0 1 15 4"></path>
+              <path d="M4 21 A17 17 0 0 1 21 4"></path>
+            </svg>
+          </button>
+          <button class="tool-btn" data-piece="roundabout_s" title="Rotonda S">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.5"></circle>
+              <circle cx="12" cy="12" r="8.5"></circle>
+            </svg>
+          </button>
+          <button class="tool-btn" data-piece="roundabout_m" title="Rotonda M">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.5"></circle>
+              <circle cx="12" cy="12" r="9.5"></circle>
+            </svg>
+          </button>
+          <button class="tool-btn" data-piece="roundabout_l" title="Rotonda L">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="2.5"></circle>
+              <circle cx="12" cy="12" r="10.5"></circle>
+            </svg>
+          </button>
         </div>
       </section>
 

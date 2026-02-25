@@ -54,6 +54,10 @@ body {
   gap: 8px;
 }
 
+.palette {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 button {
   background: #264451;
   color: var(--panel-fg);
@@ -62,6 +66,28 @@ button {
   padding: 9px 10px;
   cursor: pointer;
   text-align: left;
+}
+
+.tool-btn {
+  aspect-ratio: 1 / 1;
+  padding: 8px;
+  text-align: center;
+  display: grid;
+  place-items: center;
+}
+
+.tool-btn svg {
+  width: 28px;
+  height: 28px;
+}
+
+.tool-btn svg path,
+.tool-btn svg circle {
+  fill: none;
+  stroke: #eaf3f6;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 button:hover {

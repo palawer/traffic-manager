@@ -9,8 +9,9 @@ const paletteEl = document.getElementById("palette");
 const ROAD_WIDTH = 44;
 const LANE_WIDTH = ROAD_WIDTH / 2;
 const LANE_OFFSET = LANE_WIDTH * 0.5;
-const JOIN_ENTRY_OFFSET = 7;
-const JOIN_GRACE_TIME = 0.22;
+const JOIN_ENTRY_OFFSET = 10;
+const JOIN_GRACE_TIME = 0.6;
+const JOIN_BLEND_HANDLE = 20;
 const CONNECT_SNAP_DIST = 24;
 const CONNECT_ANGLE_TOL = 0.55;
 const GRID = 20;
@@ -37,7 +38,7 @@ const PIECES = {
       { x: 100, y: 0, dir: 0 },
     ],
     pickRadius: 120,
-    overlapRadius: 85,
+    overlapRadius: 50,
   },
   curve: {
     id: "curve",
@@ -49,7 +50,7 @@ const PIECES = {
       { x: 0, y: -100, dir: -Math.PI / 2 },
     ],
     pickRadius: 130,
-    overlapRadius: 85,
+    overlapRadius: 50,
   },
   roundabout_s: makeRoundaboutType("roundabout_s", 52, "Rotonda S"),
   roundabout_m: makeRoundaboutType("roundabout_m", 72, "Rotonda M"),
@@ -71,7 +72,7 @@ function makeRoundaboutType(id, radius, label) {
       { x: 0, y: -arm, dir: -Math.PI / 2 },
     ],
     pickRadius: arm + 24,
-    overlapRadius: radius + 56,
+    overlapRadius: radius + 28,
   };
 }
 
@@ -152,12 +153,16 @@ async function init() {
 
 function setupUi() {
   paletteEl.addEventListener("click", (e) => {
-    if (!(e.target instanceof HTMLButtonElement)) return;
-    if (e.target.dataset.tool === "select") {
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    const btn = target.closest("button");
+    if (!(btn instanceof HTMLButtonElement) || !paletteEl.contains(btn)) return;
+
+    if (btn.dataset.tool === "select") {
       setPaletteSelection(null);
       return;
     }
-    setPaletteSelection(e.target.dataset.piece || null);
+    setPaletteSelection(btn.dataset.piece || null);
   });
 
   spawnCarBtn.addEventListener("click", () => {
@@ -220,7 +225,9 @@ function setupInput() {
     }
 
     if (state.placingType) {
-      addPiece(state.placingType, world.x, world.y);
+      if (addPiece(state.placingType, world.x, world.y)) {
+        setPaletteSelection(null);
+      }
     }
   });
 
@@ -440,17 +447,151 @@ function markNetworkDirty() {
   state.networkDirty = true;
 }
 
+function transformWorldToLocal(piece, worldPoint) {
+  const dx = worldPoint.x - piece.x;
+  const dy = worldPoint.y - piece.y;
+  const c = Math.cos(piece.rot);
+  const s = Math.sin(piece.rot);
+  return { x: dx * c + dy * s, y: -dx * s + dy * c };
+}
+
+function pointSegmentDistance(px, py, x1, y1, x2, y2) {
+  const vx = x2 - x1;
+  const vy = y2 - y1;
+  const wx = px - x1;
+  const wy = py - y1;
+  const vv = vx * vx + vy * vy || 1;
+  const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vv));
+  const cx = x1 + vx * t;
+  const cy = y1 + vy * t;
+  return Math.hypot(px - cx, py - cy);
+}
+
 function getPieceOverlapRadius(piece) {
   const def = PIECES[piece.type];
-  return def.overlapRadius || def.pickRadius * 0.7;
+  return def.overlapRadius || def.pickRadius * 0.45;
+}
+
+function pointInPieceRoad(piece, worldPoint, margin = 2) {
+  const def = PIECES[piece.type];
+  const p = transformWorldToLocal(piece, worldPoint);
+  const half = Math.max(4, ROAD_WIDTH * 0.5 - margin);
+
+  if (piece.type === "straight") {
+    return pointSegmentDistance(p.x, p.y, -100, 0, 100, 0) <= half;
+  }
+
+  if (piece.type === "curve") {
+    const cx = def.center.x;
+    const cy = def.center.y;
+    const rx = p.x - cx;
+    const ry = p.y - cy;
+    const rr = Math.hypot(rx, ry);
+    const a = Math.atan2(ry, rx);
+    const inSector = a >= -0.001 && a <= Math.PI / 2 + 0.001;
+    if (inSector && Math.abs(rr - def.radius) <= half) return true;
+    for (const c of def.connectors) {
+      if (Math.hypot(p.x - c.x, p.y - c.y) <= half) return true;
+    }
+    return false;
+  }
+
+  const radii = getRoundaboutLaneRadii(def);
+  const innerEdge = radii.inner - LANE_WIDTH * 0.5;
+  const outerEdge = radii.outer + LANE_WIDTH * 0.5;
+  const rr = Math.hypot(p.x, p.y);
+  if (rr >= innerEdge + margin && rr <= outerEdge - margin) return true;
+
+  for (const c of def.connectors) {
+    const d = Math.hypot(c.x, c.y) || 1;
+    const ux = c.x / d;
+    const uy = c.y / d;
+    const t = p.x * ux + p.y * uy;
+    const lat = Math.abs(-uy * p.x + ux * p.y);
+    const start = radii.outerEdge;
+    if (t >= start && t <= d && lat <= half) return true;
+    if (t > d && Math.hypot(p.x - c.x, p.y - c.y) <= half) return true;
+  }
+
+  return false;
+}
+
+function samplePieceRoadPoints(piece) {
+  const def = PIECES[piece.type];
+  const half = ROAD_WIDTH * 0.5 - 2;
+  const local = [];
+
+  if (piece.type === "straight") {
+    for (let x = -100; x <= 100; x += 18) {
+      local.push({ x, y: -half }, { x, y: 0 }, { x, y: half });
+    }
+  } else if (piece.type === "curve") {
+    const rs = [def.radius - half, def.radius, def.radius + half];
+    for (let i = 0; i <= 10; i++) {
+      const a = (Math.PI / 2) * (i / 10);
+      for (const r of rs) {
+        local.push({ x: def.center.x + Math.cos(a) * r, y: def.center.y + Math.sin(a) * r });
+      }
+    }
+  } else {
+    const radii = getRoundaboutLaneRadii(def);
+    const innerEdge = radii.inner - LANE_WIDTH * 0.5 + 2;
+    const outerEdge = radii.outer + LANE_WIDTH * 0.5 - 2;
+    const mid = (innerEdge + outerEdge) * 0.5;
+    const ringR = [innerEdge, mid, outerEdge];
+    for (let i = 0; i < 20; i++) {
+      const a = (Math.PI * 2 * i) / 20;
+      for (const r of ringR) local.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
+    }
+    for (const c of def.connectors) {
+      const d = Math.hypot(c.x, c.y) || 1;
+      const ux = c.x / d;
+      const uy = c.y / d;
+      const px = -uy;
+      const py = ux;
+      for (let t = radii.outerEdge; t <= d; t += 18) {
+        local.push(
+          { x: ux * t + px * half, y: uy * t + py * half },
+          { x: ux * t, y: uy * t },
+          { x: ux * t - px * half, y: uy * t - py * half }
+        );
+      }
+    }
+  }
+
+  return local.map((p) => transformLocalPoint(piece, p));
+}
+
+function piecesRoadOverlap(a, b) {
+  const rA = getPieceOverlapRadius(a);
+  const rB = getPieceOverlapRadius(b);
+  if (Math.hypot(a.x - b.x, a.y - b.y) > rA + rB + 8) return false;
+
+  let hits = 0;
+  const pointsA = samplePieceRoadPoints(a);
+  for (const p of pointsA) {
+    if (pointInPieceRoad(b, p, 2.5)) {
+      hits++;
+      if (hits >= 3) return true;
+    }
+  }
+
+  hits = 0;
+  const pointsB = samplePieceRoadPoints(b);
+  for (const p of pointsB) {
+    if (pointInPieceRoad(a, p, 2.5)) {
+      hits++;
+      if (hits >= 3) return true;
+    }
+  }
+
+  return false;
 }
 
 function overlapsAnyPiece(piece, ignoreId = null) {
-  const rA = getPieceOverlapRadius(piece);
   for (const other of state.pieces) {
     if (other.id === ignoreId) continue;
-    const rB = getPieceOverlapRadius(other);
-    if (Math.hypot(piece.x - other.x, piece.y - other.y) < rA + rB) return true;
+    if (piecesRoadOverlap(piece, other)) return true;
   }
   return false;
 }
@@ -464,10 +605,11 @@ function addPiece(type, x, y) {
     rot: state.placeRotation,
   };
   snapPiece(piece);
-  if (overlapsAnyPiece(piece)) return;
+  if (overlapsAnyPiece(piece)) return false;
   state.pieces.push(piece);
   state.selectedId = piece.id;
   markNetworkDirty();
+  return true;
 }
 
 function snapPiece(piece) {
@@ -735,25 +877,39 @@ function buildTraversal(piece, fromConnectorIdx) {
     }
 
     const centerW = transformLocalPoint(piece, def.center);
-    const a0 = Math.atan2(p0Base.y - centerW.y, p0Base.x - centerW.x);
-    const a1 = Math.atan2(p1Base.y - centerW.y, p1Base.x - centerW.x);
-    const direction = fromConnectorIdx === 0 ? -1 : 1;
-    const laneRadius = def.radius + (direction < 0 ? -LANE_OFFSET : LANE_OFFSET);
     const headingIn = normalizeAngle(c0.dir + piece.rot + Math.PI);
     const headingOut = normalizeAngle(c1.dir + piece.rot);
     const entryLaneAtConnector = connectorLanePointWorld(piece, fromConnectorIdx, headingIn);
     const exitLaneAtConnector = connectorLanePointWorld(piece, toConnectorIdx, headingOut);
-    const arcPoints = buildArc(laneRadius, a0, a1, direction).map((p) => ({
+    const direction = fromConnectorIdx === 0 ? -1 : 1;
+    const laneRadius = def.radius + (direction < 0 ? LANE_OFFSET : -LANE_OFFSET);
+    const dirIn = { x: Math.cos(headingIn), y: Math.sin(headingIn) };
+    const dirOut = { x: Math.cos(headingOut), y: Math.sin(headingOut) };
+    const entryOnArc = intersectRayWithCircle(entryLaneAtConnector, dirIn, centerW, laneRadius);
+    const exitOnArc = intersectRayWithCircle(
+      exitLaneAtConnector,
+      { x: -dirOut.x, y: -dirOut.y },
+      centerW,
+      laneRadius
+    );
+
+    if (!entryOnArc || !exitOnArc) {
+      const a0 = Math.atan2(p0Base.y - centerW.y, p0Base.x - centerW.x);
+      const a1 = Math.atan2(p1Base.y - centerW.y, p1Base.x - centerW.x);
+      const arcPointsFallback = buildArc(laneRadius, a0, a1, direction).map((p) => ({
+        x: centerW.x + p.x,
+        y: centerW.y + p.y,
+      }));
+      return { path: polylineMetrics(arcPointsFallback), toConnectorIdx };
+    }
+
+    const aEntry = Math.atan2(entryOnArc.y - centerW.y, entryOnArc.x - centerW.x);
+    const aExit = Math.atan2(exitOnArc.y - centerW.y, exitOnArc.x - centerW.x);
+    const arcPoints = buildArc(laneRadius, aEntry, aExit, direction).map((p) => ({
       x: centerW.x + p.x,
       y: centerW.y + p.y,
     }));
-    const worldPoints = [
-      entryLaneAtConnector,
-      arcPoints[0],
-      ...arcPoints.slice(1, -1),
-      arcPoints[arcPoints.length - 1],
-      exitLaneAtConnector,
-    ];
+    const worldPoints = [entryLaneAtConnector, entryOnArc, ...arcPoints.slice(1, -1), exitOnArc, exitLaneAtConnector];
     return { path: polylineMetrics(worldPoints), toConnectorIdx };
   }
 
@@ -813,6 +969,33 @@ function assignTraversal(car, nextPieceId, fromConnectorIdx) {
   car.laneChoice = traversal.laneChoice || "right";
   car.exitOrdinal = PIECES[piece.type].isRoundabout
     ? roundaboutExitOrdinal(fromConnectorIdx, traversal.toConnectorIdx)
+    : null;
+  car.s = Math.min(JOIN_ENTRY_OFFSET, Math.max(0, car.path.length * 0.25));
+  car.joinGrace = JOIN_GRACE_TIME;
+  car.waiting = false;
+  return true;
+}
+
+function assignTraversalWithBlend(car, nextPiece, fromConnectorIdx) {
+  const nextTraversal = buildTraversal(nextPiece, fromConnectorIdx);
+  if (!nextTraversal || nextTraversal.path.length < 1) return false;
+
+  const pStart = pointAtPath(car.path, car.path.length);
+  const hStart = headingAtPath(car.path, Math.max(0, car.path.length - 1));
+  const pEnd = nextTraversal.path.points[0];
+  const hEnd = headingAtPath(nextTraversal.path, Math.min(nextTraversal.path.length, 2));
+  const blend = buildBezierPolyline(pStart, hStart, pEnd, hEnd, JOIN_BLEND_HANDLE, 8);
+  const combined = [...blend, ...nextTraversal.path.points.slice(1)];
+  const combinedPath = polylineMetrics(combined);
+  if (combinedPath.length < 1) return false;
+
+  car.pieceId = nextPiece.id;
+  car.fromConnectorIdx = fromConnectorIdx;
+  car.toConnectorIdx = nextTraversal.toConnectorIdx;
+  car.path = combinedPath;
+  car.laneChoice = nextTraversal.laneChoice || "right";
+  car.exitOrdinal = PIECES[nextPiece.type].isRoundabout
+    ? roundaboutExitOrdinal(fromConnectorIdx, nextTraversal.toConnectorIdx)
     : null;
   car.s = Math.min(JOIN_ENTRY_OFFSET, Math.max(0, car.path.length * 0.25));
   car.joinGrace = JOIN_GRACE_TIME;
@@ -907,15 +1090,20 @@ function assignRoundaboutTurnaroundTraversal(car, piece, deadConnectorIdx) {
 
 function spawnCar() {
   if (state.networkDirty) rebuildNetwork();
-  if (state.openConnectors.length === 0) return false;
-
-  const candidates = state.openConnectors.filter((c) => {
+  const openCandidates = state.openConnectors.filter((c) => {
     const piece = pieceById(c.pieceId);
     return piece && !PIECES[piece.type].isRoundabout;
   });
-  if (candidates.length === 0) return false;
+  const fallbackCandidates =
+    openCandidates.length > 0
+      ? openCandidates
+      : state.connectors.filter((c) => {
+          const piece = pieceById(c.pieceId);
+          return piece && !PIECES[piece.type].isRoundabout;
+        });
+  if (fallbackCandidates.length === 0) return false;
 
-  const entry = candidates[Math.floor(Math.random() * candidates.length)];
+  const entry = fallbackCandidates[Math.floor(Math.random() * fallbackCandidates.length)];
   const car = {
     id: Math.random().toString(36).slice(2, 9),
     pieceId: entry.pieceId,
@@ -954,19 +1142,26 @@ function updateCars(dt) {
     const myPos = pointAtPath(car.path, car.s);
     const myHeading = headingAtPath(car.path, car.s);
 
-    if (car.joinGrace <= 0) {
-      for (const other of state.cars) {
-        if (other === car) continue;
-        const op = pointAtPath(other.path, other.s);
-        const dist = Math.hypot(op.x - myPos.x, op.y - myPos.y);
-        if (dist > 60) continue;
-        const toOther = Math.atan2(op.y - myPos.y, op.x - myPos.x);
-        const rel = Math.abs(normalizeAngle(toOther - myHeading));
-        if (rel < 0.75 && dist < obstacleDist) obstacleDist = dist;
+    for (const other of state.cars) {
+      if (other === car) continue;
+      const op = pointAtPath(other.path, other.s);
+      const dist = Math.hypot(op.x - myPos.x, op.y - myPos.y);
+      if (dist > 60) continue;
+      const toOther = Math.atan2(op.y - myPos.y, op.x - myPos.x);
+      const rel = Math.abs(normalizeAngle(toOther - myHeading));
+
+      if (car.joinGrace > 0 || (other.joinGrace || 0) > 0) {
+        // Durante empalmes, ignora conflictos blandos para evitar vibración en junta.
+        if (!(dist < 10 && rel < 1.2)) continue;
+      } else if (rel >= 0.75) {
+        continue;
       }
+
+      if (dist < obstacleDist) obstacleDist = dist;
     }
 
     let target = car.desiredSpeed;
+    if (car.joinGrace > 0) target = Math.max(target, 28);
     if (obstacleDist < 24) target = 0;
     else if (obstacleDist < 40) target *= 0.35;
 
@@ -1021,22 +1216,10 @@ function updateCars(dt) {
           break;
         }
 
-        const nextTraversal = buildTraversal(nextPiece, next.connectorIndex);
-        if (!nextTraversal || nextTraversal.path.length < 1) {
+        if (!assignTraversalWithBlend(car, nextPiece, next.connectorIndex)) {
           car.remove = true;
           break;
         }
-        car.pieceId = nextPiece.id;
-        car.fromConnectorIdx = next.connectorIndex;
-        car.toConnectorIdx = nextTraversal.toConnectorIdx;
-        car.path = nextTraversal.path;
-        car.laneChoice = nextTraversal.laneChoice || "right";
-        car.exitOrdinal = PIECES[nextPiece.type].isRoundabout
-          ? roundaboutExitOrdinal(next.connectorIndex, nextTraversal.toConnectorIdx)
-          : null;
-        car.s = Math.min(JOIN_ENTRY_OFFSET, Math.max(0, car.path.length * 0.25));
-        car.joinGrace = JOIN_GRACE_TIME;
-        car.waiting = false;
       }
     }
   }
