@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rotonda Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <aside class="panel">
+      <h1>Rotonda Lab</h1>
+      <p class="hint">Construye la red y pulsa play.</p>
+
+      <section>
+        <h2>Piezas</h2>
+        <div class="palette" id="palette">
+          <button data-tool="select" class="active">Seleccionar</button>
+          <button data-piece="straight">Recta</button>
+          <button data-piece="curve">Curva 90º</button>
+          <button data-piece="roundabout_s">Rotonda S</button>
+          <button data-piece="roundabout_m">Rotonda M</button>
+          <button data-piece="roundabout_l">Rotonda L</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Simulación</h2>
+        <div class="controls">
+          <button id="playBtn">Play</button>
+          <button id="clearCarsBtn">Quitar coches</button>
+          <button id="clearAllBtn">Borrar todo</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Controles</h2>
+        <ul>
+          <li>Seleccionar: elegir/mover piezas</li>
+          <li>Recta/Curva/Rotonda: modo colocación</li>
+          <li>Click en canvas: colocar pieza activa</li>
+          <li>R: rotar seleccionada</li>
+          <li>Supr: borrar seleccionada</li>
+          <li>Rueda: zoom</li>
+          <li>Espacio + arrastre: mover cámara</li>
+        </ul>
+      </section>
+
+      <p id="status" class="status">Modo edición</p>
+    </aside>
+
+    <main class="stage">
+      <div id="world"></div>
+    </main>
+
+    <script src="./pixi.min.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>
