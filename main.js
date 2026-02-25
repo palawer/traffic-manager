@@ -1,5 +1,6 @@
 const worldEl = document.getElementById("world");
-const playBtn = document.getElementById("playBtn");
+const spawnCarBtn = document.getElementById("spawnCarBtn");
+const debugLanesBtn = document.getElementById("debugLanesBtn");
 const clearCarsBtn = document.getElementById("clearCarsBtn");
 const clearAllBtn = document.getElementById("clearAllBtn");
 const statusEl = document.getElementById("status");
@@ -7,7 +8,7 @@ const paletteEl = document.getElementById("palette");
 
 const ROAD_WIDTH = 44;
 const LANE_WIDTH = ROAD_WIDTH / 2;
-const LANE_OFFSET = LANE_WIDTH * 0.25;
+const LANE_OFFSET = LANE_WIDTH * 0.5;
 const CONNECT_SNAP_DIST = 24;
 const CONNECT_ANGLE_TOL = 0.55;
 const GRID = 20;
@@ -22,6 +23,7 @@ const COLORS = {
   connectorOpen: 0xd96a6a,
   connectorLinked: 0x2ea866,
   carStroke: 0x172028,
+  debugLane: 0x0a84ff,
 };
 
 const PIECES = {
@@ -33,6 +35,7 @@ const PIECES = {
       { x: 100, y: 0, dir: 0 },
     ],
     pickRadius: 120,
+    overlapRadius: 85,
   },
   curve: {
     id: "curve",
@@ -44,6 +47,7 @@ const PIECES = {
       { x: 0, y: -100, dir: -Math.PI / 2 },
     ],
     pickRadius: 130,
+    overlapRadius: 85,
   },
   roundabout_s: makeRoundaboutType("roundabout_s", 52, "Rotonda S"),
   roundabout_m: makeRoundaboutType("roundabout_m", 72, "Rotonda M"),
@@ -65,6 +69,7 @@ function makeRoundaboutType(id, radius, label) {
       { x: 0, y: -arm, dir: -Math.PI / 2 },
     ],
     pickRadius: arm + 24,
+    overlapRadius: radius + 56,
   };
 }
 
@@ -75,7 +80,6 @@ const state = {
   tool: "select",
   placingType: null,
   placeRotation: 0,
-  running: false,
   nextPieceId: 1,
   draggingPieceId: null,
   dragOffset: { x: 0, y: 0 },
@@ -87,7 +91,8 @@ const state = {
   connections: new Map(),
   openConnectors: [],
   cars: [],
-  spawnTimer: 0,
+  pendingSpawns: 0,
+  debugLanes: true,
 };
 
 const app = new PIXI.Application();
@@ -95,6 +100,7 @@ let canvas = null;
 let camera = null;
 let gridGraphics = null;
 let roadsGraphics = null;
+let debugGraphics = null;
 let connectorsGraphics = null;
 let carsGraphics = null;
 
@@ -117,11 +123,13 @@ async function init() {
   camera = new PIXI.Container();
   gridGraphics = new PIXI.Graphics();
   roadsGraphics = new PIXI.Graphics();
+  debugGraphics = new PIXI.Graphics();
   connectorsGraphics = new PIXI.Graphics();
   carsGraphics = new PIXI.Graphics();
 
   camera.addChild(gridGraphics);
   camera.addChild(roadsGraphics);
+  camera.addChild(debugGraphics);
   camera.addChild(connectorsGraphics);
   camera.addChild(carsGraphics);
   app.stage.addChild(camera);
@@ -146,24 +154,37 @@ function setupUi() {
     setPaletteSelection(e.target.dataset.piece || null);
   });
 
-  playBtn.addEventListener("click", () => {
-    state.running = !state.running;
-    playBtn.textContent = state.running ? "Pause" : "Play";
-    if (!state.running) statusEl.textContent = "Herramienta: Seleccionar";
+  spawnCarBtn.addEventListener("click", () => {
+    state.pendingSpawns += 1;
+    updateSpawnButtonLabel();
   });
+
+  debugLanesBtn.addEventListener("click", () => {
+    state.debugLanes = !state.debugLanes;
+    debugLanesBtn.textContent = `Debug carriles: ${state.debugLanes ? "ON" : "OFF"}`;
+    debugLanesBtn.classList.toggle("active", state.debugLanes);
+  });
+  debugLanesBtn.textContent = `Debug carriles: ${state.debugLanes ? "ON" : "OFF"}`;
+  debugLanesBtn.classList.toggle("active", state.debugLanes);
 
   clearCarsBtn.addEventListener("click", () => {
     state.cars = [];
-    state.spawnTimer = 0;
+    state.pendingSpawns = 0;
+    updateSpawnButtonLabel();
   });
 
   clearAllBtn.addEventListener("click", () => {
     state.pieces = [];
     state.selectedId = null;
     state.cars = [];
-    state.spawnTimer = 0;
+    state.pendingSpawns = 0;
+    updateSpawnButtonLabel();
     markNetworkDirty();
   });
+}
+
+function updateSpawnButtonLabel() {
+  spawnCarBtn.textContent = `Spawn coche (${state.cars.length}) [+${state.pendingSpawns}]`;
 }
 
 function setupInput() {
@@ -211,10 +232,17 @@ function setupInput() {
     if (state.draggingPieceId) {
       const piece = pieceById(state.draggingPieceId);
       if (!piece) return;
+      const prevX = piece.x;
+      const prevY = piece.y;
       const world = screenToWorld(e.offsetX, e.offsetY);
       piece.x = snap(world.x - state.dragOffset.x);
       piece.y = snap(world.y - state.dragOffset.y);
       snapPiece(piece);
+      if (overlapsAnyPiece(piece, piece.id)) {
+        piece.x = prevX;
+        piece.y = prevY;
+        return;
+      }
       markNetworkDirty();
     }
   });
@@ -404,10 +432,21 @@ function rebuildNetwork() {
 
 function markNetworkDirty() {
   state.networkDirty = true;
-  if (state.running) {
-    state.cars = [];
-    state.spawnTimer = 0;
+}
+
+function getPieceOverlapRadius(piece) {
+  const def = PIECES[piece.type];
+  return def.overlapRadius || def.pickRadius * 0.7;
+}
+
+function overlapsAnyPiece(piece, ignoreId = null) {
+  const rA = getPieceOverlapRadius(piece);
+  for (const other of state.pieces) {
+    if (other.id === ignoreId) continue;
+    const rB = getPieceOverlapRadius(other);
+    if (Math.hypot(piece.x - other.x, piece.y - other.y) < rA + rB) return true;
   }
+  return false;
 }
 
 function addPiece(type, x, y) {
@@ -418,9 +457,10 @@ function addPiece(type, x, y) {
     y: snap(y),
     rot: state.placeRotation,
   };
+  snapPiece(piece);
+  if (overlapsAnyPiece(piece)) return;
   state.pieces.push(piece);
   state.selectedId = piece.id;
-  snapPiece(piece);
   markNetworkDirty();
 }
 
@@ -510,6 +550,18 @@ function headingAtPath(path, s) {
   return Math.atan2(b.y - a.y, b.x - a.x);
 }
 
+function bezierPoint(p0, p1, p2, p3, t) {
+  const u = 1 - t;
+  const uu = u * u;
+  const tt = t * t;
+  const uuu = uu * u;
+  const ttt = tt * t;
+  return {
+    x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+    y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y,
+  };
+}
+
 function getRoundaboutLaneRadii(def) {
   const outer = def.radius + 12;
   const inner = outer - LANE_WIDTH;
@@ -520,22 +572,25 @@ function getRoundaboutLaneRadii(def) {
 
 function buildArc(radius, startAngle, endAngle, direction = -1) {
   const pts = [{ x: Math.cos(startAngle) * radius, y: Math.sin(startAngle) * radius }];
-  let a = startAngle;
-  let guard = 0;
+  const full = Math.PI * 2;
+  let travel;
   if (direction < 0) {
-    while (normalizeAngle(a - endAngle) > 0.04 && guard < 120) {
-      a -= 0.12;
-      pts.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius });
-      guard++;
-    }
+    travel = startAngle - endAngle;
+    while (travel < 0) travel += full;
   } else {
-    while (normalizeAngle(endAngle - a) > 0.04 && guard < 120) {
-      a += 0.12;
-      pts.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius });
-      guard++;
-    }
+    travel = endAngle - startAngle;
+    while (travel < 0) travel += full;
   }
-  pts.push({ x: Math.cos(endAngle) * radius, y: Math.sin(endAngle) * radius });
+
+  const stepAngle = 0.12;
+  const steps = Math.max(1, Math.ceil(travel / stepAngle));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const a = direction < 0 ? startAngle - travel * t : startAngle + travel * t;
+    pts.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius });
+  }
+  const endA = direction < 0 ? startAngle - travel : startAngle + travel;
+  pts.push({ x: Math.cos(endA) * radius, y: Math.sin(endA) * radius });
   return pts;
 }
 
@@ -543,30 +598,32 @@ function buildTraversal(piece, fromConnectorIdx) {
   const def = PIECES[piece.type];
   if (!def.isRoundabout) {
     const toConnectorIdx = fromConnectorIdx === 0 ? 1 : 0;
-    const p0 = transformLocalPoint(piece, def.connectors[fromConnectorIdx]);
-    const p1 = transformLocalPoint(piece, def.connectors[toConnectorIdx]);
+    const c0 = def.connectors[fromConnectorIdx];
+    const c1 = def.connectors[toConnectorIdx];
+    const p0Base = transformLocalPoint(piece, c0);
+    const p1Base = transformLocalPoint(piece, c1);
 
     if (piece.type === "straight") {
-      const vx = p1.x - p0.x;
-      const vy = p1.y - p0.y;
+      const vx = p1Base.x - p0Base.x;
+      const vy = p1Base.y - p0Base.y;
       const len = Math.hypot(vx, vy) || 1;
       const nx = vy / len;
       const ny = -vx / len;
       return {
         path: polylineMetrics([
-          { x: p0.x + nx * LANE_OFFSET, y: p0.y + ny * LANE_OFFSET },
-          { x: p1.x + nx * LANE_OFFSET, y: p1.y + ny * LANE_OFFSET },
+          { x: p0Base.x - nx * LANE_OFFSET, y: p0Base.y - ny * LANE_OFFSET },
+          { x: p1Base.x - nx * LANE_OFFSET, y: p1Base.y - ny * LANE_OFFSET },
         ]),
         toConnectorIdx,
       };
     }
 
     const centerW = transformLocalPoint(piece, def.center);
-    const a0 = Math.atan2(p0.y - centerW.y, p0.x - centerW.x);
-    const a1 = Math.atan2(p1.y - centerW.y, p1.x - centerW.x);
-    const clockwise = normalizeAngle(a1 - a0) < 0;
-    const laneRadius = def.radius + (clockwise ? LANE_OFFSET : -LANE_OFFSET);
-    const pts = buildArc(laneRadius, a0, a1, clockwise ? -1 : 1).map((p) => ({
+    const a0 = Math.atan2(p0Base.y - centerW.y, p0Base.x - centerW.x);
+    const a1 = Math.atan2(p1Base.y - centerW.y, p1Base.x - centerW.x);
+    const direction = fromConnectorIdx === 0 ? -1 : 1;
+    const laneRadius = def.radius + (fromConnectorIdx === 0 ? LANE_OFFSET : -LANE_OFFSET);
+    const pts = buildArc(laneRadius, a0, a1, direction).map((p) => ({
       x: centerW.x + p.x,
       y: centerW.y + p.y,
     }));
@@ -574,27 +631,21 @@ function buildTraversal(piece, fromConnectorIdx) {
   }
 
   const exits = [0, 1, 2, 3].filter((i) => i !== fromConnectorIdx);
-  const toConnectorIdx = exits[Math.floor(Math.random() * exits.length)];
+  const connectedExits = exits.filter((i) => state.connections.has(`${piece.id}:${i}`));
+  const candidates = connectedExits.length > 0 ? connectedExits : exits;
+  const toConnectorIdx = candidates[Math.floor(Math.random() * candidates.length)];
   const inConn = def.connectors[fromConnectorIdx];
   const outConn = def.connectors[toConnectorIdx];
   const radii = getRoundaboutLaneRadii(def);
 
   const aIn = Math.atan2(inConn.y, inConn.x);
   const aOut = Math.atan2(outConn.y, outConn.x);
-  const stepsClockwise = (fromConnectorIdx - toConnectorIdx + 4) % 4;
-  const laneChoice = stepsClockwise <= 1 ? "outer" : Math.random() < 0.6 ? "inner" : "outer";
-  const laneR = laneChoice === "inner" ? radii.inner : radii.outer;
+  const laneChoice = "outer";
+  const laneR = radii.outer;
 
   const localPoints = [{ x: inConn.x, y: inConn.y }, { x: Math.cos(aIn) * laneR, y: Math.sin(aIn) * laneR }];
 
-  if (laneChoice === "inner" && stepsClockwise > 1) {
-    const mergeAngle = aOut + 0.55;
-    localPoints.push(...buildArc(radii.inner, aIn, mergeAngle, -1));
-    localPoints.push({ x: Math.cos(mergeAngle) * radii.outer, y: Math.sin(mergeAngle) * radii.outer });
-    localPoints.push(...buildArc(radii.outer, mergeAngle, aOut, -1));
-  } else {
-    localPoints.push(...buildArc(laneR, aIn, aOut, -1));
-  }
+  localPoints.push(...buildArc(laneR, aIn, aOut, -1));
 
   localPoints.push({ x: Math.cos(aOut) * radii.outer, y: Math.sin(aOut) * radii.outer });
   localPoints.push({ x: outConn.x, y: outConn.y });
@@ -649,15 +700,75 @@ function assignTraversal(car, nextPieceId, fromConnectorIdx) {
   return true;
 }
 
+function buildTurnaroundTransition(piece, deadConnectorIdx, pStart, hStart, pEnd, hEnd) {
+  const connector = getWorldConnectors(piece)[deadConnectorIdx];
+  if (!connector) return [];
+  const rStart = Math.hypot(pStart.x - connector.x, pStart.y - connector.y);
+  const rEnd = Math.hypot(pEnd.x - connector.x, pEnd.y - connector.y);
+
+  let transition = [];
+  if (Math.abs(rStart - rEnd) < 2) {
+    const startA = Math.atan2(pStart.y - connector.y, pStart.x - connector.x);
+    const endA = Math.atan2(pEnd.y - connector.y, pEnd.x - connector.x);
+    const tangentCW = startA - Math.PI / 2;
+    const tangentCCW = startA + Math.PI / 2;
+    const diffCW = Math.abs(normalizeAngle(tangentCW - hStart));
+    const diffCCW = Math.abs(normalizeAngle(tangentCCW - hStart));
+    const direction = diffCW <= diffCCW ? -1 : 1;
+
+    const arcLocal = buildArc((rStart + rEnd) * 0.5, startA, endA, direction);
+    transition = arcLocal.map((p) => ({ x: connector.x + p.x, y: connector.y + p.y }));
+  } else {
+    const turnRadius = Math.max(12, LANE_WIDTH * 0.6);
+    const c1 = {
+      x: pStart.x + Math.cos(hStart) * turnRadius,
+      y: pStart.y + Math.sin(hStart) * turnRadius,
+    };
+    const c2 = {
+      x: pEnd.x - Math.cos(hEnd) * turnRadius,
+      y: pEnd.y - Math.sin(hEnd) * turnRadius,
+    };
+    const steps = 10;
+    for (let i = 0; i <= steps; i++) {
+      transition.push(bezierPoint(pStart, c1, c2, pEnd, i / steps));
+    }
+  }
+  return transition;
+}
+
+function assignTurnaroundTraversal(car, piece, deadConnectorIdx) {
+  const reverseTraversal = buildTraversal(piece, deadConnectorIdx);
+  if (!reverseTraversal || reverseTraversal.path.length < 1) return false;
+
+  const pStart = pointAtPath(car.path, car.path.length);
+  const hStart = headingAtPath(car.path, Math.max(0, car.path.length - 1));
+  const pEnd = reverseTraversal.path.points[0];
+  const hEnd = headingAtPath(reverseTraversal.path, 1);
+  const transition = buildTurnaroundTransition(piece, deadConnectorIdx, pStart, hStart, pEnd, hEnd);
+  if (transition.length < 2) return false;
+
+  const combined = [...transition, ...reverseTraversal.path.points.slice(1)];
+  const combinedPath = polylineMetrics(combined);
+  if (combinedPath.length < 1) return false;
+
+  car.pieceId = piece.id;
+  car.fromConnectorIdx = deadConnectorIdx;
+  car.toConnectorIdx = reverseTraversal.toConnectorIdx;
+  car.path = combinedPath;
+  car.s = 0;
+  car.waiting = false;
+  return true;
+}
+
 function spawnCar() {
   if (state.networkDirty) rebuildNetwork();
-  if (state.openConnectors.length === 0) return;
+  if (state.openConnectors.length === 0) return false;
 
   const candidates = state.openConnectors.filter((c) => {
     const piece = pieceById(c.pieceId);
     return piece && !PIECES[piece.type].isRoundabout;
   });
-  if (candidates.length === 0) return;
+  if (candidates.length === 0) return false;
 
   const entry = candidates[Math.floor(Math.random() * candidates.length)];
   const car = {
@@ -679,18 +790,16 @@ function spawnCar() {
       const p = pointAtPath(c.path, c.s);
       return Math.hypot(p.x - head.x, p.y - head.y) < 35;
     });
-    if (!blocked) state.cars.push(car);
+    if (!blocked) {
+      state.cars.push(car);
+      return true;
+    }
   }
+  return false;
 }
 
 function updateCars(dt) {
   if (state.networkDirty) rebuildNetwork();
-
-  state.spawnTimer += dt;
-  if (state.spawnTimer > 1.7) {
-    state.spawnTimer = 0;
-    if (state.cars.length < 45) spawnCar();
-  }
 
   for (const car of state.cars) {
     let obstacleDist = Infinity;
@@ -730,6 +839,14 @@ function updateCars(dt) {
         const currentKey = `${car.pieceId}:${car.toConnectorIdx}`;
         const nextKey = state.connections.get(currentKey);
         if (!nextKey) {
+          const currentPiece = pieceById(car.pieceId);
+          if (currentPiece && !PIECES[currentPiece.type].isRoundabout) {
+            if (!assignTurnaroundTraversal(car, currentPiece, car.toConnectorIdx)) {
+              car.remove = true;
+              break;
+            }
+            continue;
+          }
           car.remove = true;
           break;
         }
@@ -757,6 +874,17 @@ function updateCars(dt) {
   }
 
   state.cars = state.cars.filter((c) => !c.remove);
+
+  // Consume cola de spawns: clicks rápidos se respetan y no se pierden.
+  if (state.pendingSpawns > 0) {
+    const maxAttemptsPerFrame = 6;
+    let attempts = 0;
+    while (state.pendingSpawns > 0 && attempts < maxAttemptsPerFrame) {
+      if (!spawnCar()) break;
+      state.pendingSpawns -= 1;
+      attempts += 1;
+    }
+  }
 }
 
 function applyCameraTransform() {
@@ -772,41 +900,77 @@ function drawGrid() {
   const major = GRID * 5;
 
   gridGraphics.clear();
-  gridGraphics.alpha = 1;
 
   for (let x = Math.floor(min.x / GRID) * GRID; x <= max.x; x += GRID) {
     const majorLine = Math.abs(x % major) < 0.0001;
-    gridGraphics.lineStyle({ width: 1 / state.view.zoom, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
     gridGraphics.moveTo(x, min.y);
     gridGraphics.lineTo(x, max.y);
+    gridGraphics.stroke({
+      width: 1 / state.view.zoom,
+      color: majorLine ? COLORS.gridMajor : COLORS.gridMinor,
+      alpha: 1,
+    });
   }
 
   for (let y = Math.floor(min.y / GRID) * GRID; y <= max.y; y += GRID) {
     const majorLine = Math.abs(y % major) < 0.0001;
-    gridGraphics.lineStyle({ width: 1 / state.view.zoom, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
     gridGraphics.moveTo(min.x, y);
     gridGraphics.lineTo(max.x, y);
+    gridGraphics.stroke({
+      width: 1 / state.view.zoom,
+      color: majorLine ? COLORS.gridMajor : COLORS.gridMinor,
+      alpha: 1,
+    });
   }
 }
 
-function drawRoadStroke(g) {
+function strokeRoadPath(g, buildPath) {
+  buildPath();
   g.stroke({ width: ROAD_WIDTH, color: COLORS.road, cap: "round" });
+  buildPath();
   g.stroke({ width: 2, color: COLORS.divider, cap: "round" });
+}
+
+function strokeArcPath(g, cx, cy, radius, start, end, anticlockwise, style) {
+  g.moveTo(cx + Math.cos(start) * radius, cy + Math.sin(start) * radius);
+  g.arc(cx, cy, radius, start, end, anticlockwise);
+  g.stroke(style);
+}
+
+function drawOpenEndCaps(g, piece) {
+  if (piece.type === "roundabout_s" || piece.type === "roundabout_m" || piece.type === "roundabout_l") return;
+  const worldConnectors = getWorldConnectors(piece);
+  for (const c of worldConnectors) {
+    if (state.connections.has(c.key)) continue;
+    g.circle(c.x, c.y, ROAD_WIDTH * 0.5);
+    g.fill(COLORS.road);
+    g.circle(c.x, c.y, 1.4);
+    g.fill(COLORS.divider);
+  }
 }
 
 function drawPiece(g, piece) {
   const def = PIECES[piece.type];
 
   if (piece.type === "straight") {
-    g.moveTo(piece.x - 100 * Math.cos(piece.rot), piece.y - 100 * Math.sin(piece.rot));
-    g.lineTo(piece.x + 100 * Math.cos(piece.rot), piece.y + 100 * Math.sin(piece.rot));
-    drawRoadStroke(g);
+    strokeRoadPath(g, () => {
+      g.moveTo(piece.x - 100 * Math.cos(piece.rot), piece.y - 100 * Math.sin(piece.rot));
+      g.lineTo(piece.x + 100 * Math.cos(piece.rot), piece.y + 100 * Math.sin(piece.rot));
+    });
   } else if (piece.type === "curve") {
     const center = transformLocalPoint(piece, def.center);
     const start = Math.PI / 2 + piece.rot;
     const end = piece.rot;
-    g.arc(center.x, center.y, def.radius, start, end, true);
-    drawRoadStroke(g);
+    strokeArcPath(g, center.x, center.y, def.radius, start, end, true, {
+      width: ROAD_WIDTH,
+      color: COLORS.road,
+      cap: "round",
+    });
+    strokeArcPath(g, center.x, center.y, def.radius, start, end, true, {
+      width: 2,
+      color: COLORS.divider,
+      cap: "round",
+    });
   } else {
     const radii = getRoundaboutLaneRadii(def);
 
@@ -817,17 +981,30 @@ function drawPiece(g, piece) {
         x: (c.x / d) * (radii.outerEdge + 2),
         y: (c.y / d) * (radii.outerEdge + 2),
       });
-      g.moveTo(p0.x, p0.y);
-      g.lineTo(c0.x, c0.y);
-      drawRoadStroke(g);
+      strokeRoadPath(g, () => {
+        g.moveTo(p0.x, p0.y);
+        g.lineTo(c0.x, c0.y);
+      });
     }
 
-    g.arc(piece.x, piece.y, (radii.inner + radii.outer) * 0.5, 0, Math.PI * 2);
-    g.stroke({ width: LANE_WIDTH * 2, color: COLORS.road });
+    strokeArcPath(
+      g,
+      piece.x,
+      piece.y,
+      (radii.inner + radii.outer) * 0.5,
+      0,
+      Math.PI * 2,
+      false,
+      { width: LANE_WIDTH * 2, color: COLORS.road }
+    );
 
-    g.arc(piece.x, piece.y, radii.divider, 0, Math.PI * 2);
-    g.stroke({ width: 2, color: COLORS.divider });
+    strokeArcPath(g, piece.x, piece.y, radii.divider, 0, Math.PI * 2, false, {
+      width: 2,
+      color: COLORS.divider,
+    });
   }
+
+  drawOpenEndCaps(g, piece);
 
   if (state.selectedId === piece.id) {
     g.circle(piece.x, piece.y, def.pickRadius - 8);
@@ -847,6 +1024,93 @@ function drawRoadsAndConnectors() {
     const linked = state.connections.has(c.key);
     connectorsGraphics.circle(c.x, c.y, 3.5 / state.view.zoom);
     connectorsGraphics.fill(linked ? COLORS.connectorLinked : COLORS.connectorOpen);
+  }
+}
+
+function strokePolyline(g, points, style) {
+  if (!points || points.length < 2) return;
+  g.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) g.lineTo(points[i].x, points[i].y);
+  g.stroke(style);
+}
+
+function drawDebugLanes() {
+  debugGraphics.clear();
+  if (!state.debugLanes) return;
+
+  const style = { width: 1.6 / state.view.zoom, color: COLORS.debugLane, alpha: 0.95 };
+  const arcStyle = { width: 1.6 / state.view.zoom, color: COLORS.debugLane, alpha: 0.95 };
+  const turnStyle = { width: 1.6 / state.view.zoom, color: COLORS.debugLane, alpha: 0.95 };
+
+  for (const piece of state.pieces) {
+    const def = PIECES[piece.type];
+    if (piece.type === "straight") {
+      strokePolyline(
+        debugGraphics,
+        [
+          transformLocalPoint(piece, { x: -100, y: -LANE_OFFSET }),
+          transformLocalPoint(piece, { x: 100, y: -LANE_OFFSET }),
+        ],
+        style
+      );
+      strokePolyline(
+        debugGraphics,
+        [
+          transformLocalPoint(piece, { x: -100, y: LANE_OFFSET }),
+          transformLocalPoint(piece, { x: 100, y: LANE_OFFSET }),
+        ],
+        style
+      );
+    } else if (piece.type === "curve") {
+      const center = transformLocalPoint(piece, def.center);
+      const start = Math.PI / 2 + piece.rot;
+      const end = piece.rot;
+      strokeArcPath(debugGraphics, center.x, center.y, def.radius - LANE_OFFSET, start, end, true, arcStyle);
+      strokeArcPath(debugGraphics, center.x, center.y, def.radius + LANE_OFFSET, start, end, true, arcStyle);
+    } else {
+      const radii = getRoundaboutLaneRadii(def);
+      strokeArcPath(debugGraphics, piece.x, piece.y, radii.inner, 0, Math.PI * 2, false, arcStyle);
+      strokeArcPath(debugGraphics, piece.x, piece.y, radii.outer, 0, Math.PI * 2, false, arcStyle);
+
+      for (const c of def.connectors) {
+        const d = Math.hypot(c.x, c.y) || 1;
+        const ux = c.x / d;
+        const uy = c.y / d;
+        const px = -uy;
+        const py = ux;
+        const startDist = radii.outerEdge + 2;
+
+        for (const side of [-1, 1]) {
+          const p0 = transformLocalPoint(piece, {
+            x: ux * startDist + px * side * LANE_OFFSET,
+            y: uy * startDist + py * side * LANE_OFFSET,
+          });
+          const p1 = transformLocalPoint(piece, {
+            x: ux * d + px * side * LANE_OFFSET,
+            y: uy * d + py * side * LANE_OFFSET,
+          });
+          strokePolyline(debugGraphics, [p0, p1], style);
+        }
+      }
+    }
+
+    if (!def.isRoundabout && def.connectors.length === 2) {
+      const worldConnectors = getWorldConnectors(piece);
+      for (const c of worldConnectors) {
+        if (state.connections.has(c.key)) continue;
+        const deadIdx = c.connectorIndex;
+        const fromIdx = deadIdx === 0 ? 1 : 0;
+        const inPath = buildTraversal(piece, fromIdx);
+        const outPath = buildTraversal(piece, deadIdx);
+        if (!inPath || !outPath || inPath.path.length < 1 || outPath.path.length < 1) continue;
+        const pStart = pointAtPath(inPath.path, inPath.path.length);
+        const hStart = headingAtPath(inPath.path, Math.max(0, inPath.path.length - 1));
+        const pEnd = outPath.path.points[0];
+        const hEnd = headingAtPath(outPath.path, 1);
+        const turn = buildTurnaroundTransition(piece, deadIdx, pStart, hStart, pEnd, hEnd);
+        strokePolyline(debugGraphics, turn, turnStyle);
+      }
+    }
   }
 }
 
@@ -874,26 +1138,24 @@ function drawCars() {
 }
 
 function updateStatus() {
-  if (state.running) {
-    statusEl.textContent = `Simulando: ${state.cars.length} coches`;
-    return;
-  }
+  updateSpawnButtonLabel();
 
   if (state.tool === "select") {
-    statusEl.textContent = "Herramienta: Seleccionar";
+    statusEl.textContent = "Simulando siempre · Herramienta: Seleccionar";
     return;
   }
 
   const deg = ((Math.round((state.placeRotation * 180) / Math.PI) % 360) + 360) % 360;
-  statusEl.textContent = `Colocando: ${PIECES[state.placingType].label} (${deg}º)`;
+  statusEl.textContent = `Simulando siempre · Colocando: ${PIECES[state.placingType].label} (${deg}º)`;
 }
 
 function frame(dt) {
-  if (state.running) updateCars(dt);
+  updateCars(dt);
   updateStatus();
 
   applyCameraTransform();
   drawGrid();
   drawRoadsAndConnectors();
+  drawDebugLanes();
   drawCars();
 }

@@ -6,7 +6,7 @@ Prototipo de juego/simulador en navegador con canvas infinito para construir red
 - Curvas de 90º
 - Rotondas de 3 tamaños (S/M/L)
 
-Incluye modo `Play` con coches que:
+Incluye simulación siempre activa con coches que:
 
 - Entran por conexiones abiertas
 - Recorren la red conectada
@@ -29,9 +29,9 @@ PixiJS se carga desde `./pixi.min.js` en el propio proyecto.
 - `Supr`: borrar pieza seleccionada
 - Rueda: zoom
 - `Espacio + arrastre`: mover cámara
-- `Play`: arrancar/parar simulación
+- `Spawn coche`: añade un coche manualmente
 
 ## Notas
 
 - Es un MVP: la lógica de tráfico está simplificada.
-- Si cambias la red durante `Play`, se reinician los coches para recalcular rutas.
+- Si cambias la red, se reinician los coches para recalcular rutas.
