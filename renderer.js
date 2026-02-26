@@ -54,7 +54,6 @@ export async function initRenderer() {
   camera.addChild(previewGraphics);
   camera.addChild(carsGraphics);
   camera.addChild(carLabelsContainer);
-  camera.addChild(speedLabelsContainer);
   app.stage.addChild(camera);
 
   return { app };
