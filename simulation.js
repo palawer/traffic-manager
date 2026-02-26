@@ -21,7 +21,7 @@ export function isConnectorGreen(connector) {
   if (!signal) return true;
   const phase = signal.phases[signal.currentPhase];
   if (!phase) return true;
-  return phase.greenConnectors.has(connector.id);
+  return phase.greenConnectors.has(`${connector.inSegId}:${connector.inDir}`);
 }
 
 /**

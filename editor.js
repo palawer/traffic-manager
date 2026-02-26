@@ -227,10 +227,12 @@ function createDefaultSignal(nodeId) {
   inDirs.sort((a, b) => a.angle - b.angle);
 
   // Alternating split: even indices → phase 0, odd → phase 1
+  // Store stable arm keys "segId:dir" instead of ephemeral connector IDs,
+  // so the signal survives topology changes (rebuildJunctions reassigns IDs).
   const phase0 = new Set(), phase1 = new Set();
   inDirs.forEach(({ conns }, i) => {
     const target = i % 2 === 0 ? phase0 : phase1;
-    for (const conn of conns) target.add(conn.id);
+    for (const conn of conns) target.add(`${conn.inSegId}:${conn.inDir}`);
   });
 
   const dur = SIGNAL_PHASE_DURATION;
