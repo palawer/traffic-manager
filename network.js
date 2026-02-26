@@ -1,5 +1,6 @@
 import { state } from "./state.js";
 import { buildJunction } from "./junction.js";
+import { saveState } from "./persistence.js";
 
 export function addNode(x, y) {
   const id = state.nextNodeId++;
@@ -69,6 +70,7 @@ export function rebuildJunctions() {
   }
   state.nextConnectorId = connectorIdRef.value;
   state.networkDirty = false;
+  saveState();
 }
 
 export function markNetworkDirty() {

@@ -2,6 +2,7 @@ import { state, NODE_SNAP_DIST, GRID, LANE_WIDTH } from "./state.js";
 import { snap, pointAtPath } from "./geometry.js";
 import { addNode, addSegment, removeNode, removeSegment, markNetworkDirty, rebuildJunctions } from "./network.js";
 import { canvas, screenToWorld, setTool } from "./renderer.js";
+import { saveState } from "./persistence.js";
 
 /**
  * Find the nearest node within snap distance of (wx, wy).
@@ -188,6 +189,7 @@ function cycleArrows(segId, dir, laneIdx) {
   const next = ARROW_PRESETS[(idx + 1) % ARROW_PRESETS.length];
   if (next.length === 0) state.laneArrows.delete(key);
   else state.laneArrows.set(key, new Set(next));
+  saveState();
 }
 
 /**
@@ -272,6 +274,7 @@ function onPointerDown(e) {
     if (nodeId !== null) {
       if (state.signals.has(nodeId)) state.signals.delete(nodeId);
       else createDefaultSignal(nodeId);
+      saveState();
     }
     return;
   }

@@ -2,6 +2,7 @@ import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
+import { saveState } from "./persistence.js";
 
 const app = new PIXI.Application();
 export let canvas = null;
@@ -478,6 +479,7 @@ export function setupUi() {
     if (!seg) return;
     fn(seg);
     markNetworkDirty();
+    saveState();
   }
   const SPEED_CYCLE = [30, 50, 80, 120];
   document.getElementById("atobMinus").addEventListener("click", () => withSeg(s => { if (s.lanesAtoB + s.lanesBtoA > 1) s.lanesAtoB = Math.max(0, s.lanesAtoB - 1); }));
@@ -532,6 +534,7 @@ export function setupUi() {
     state.nextSegmentId = 1;
     updateSpawnButtonLabel();
     markNetworkDirty();
+    saveState();
   });
 
   setTool("segment");

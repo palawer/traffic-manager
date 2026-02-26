@@ -1,4 +1,6 @@
 import { state } from "./state.js";
+import { loadState } from "./persistence.js";
+import { rebuildJunctions } from "./network.js";
 import {
   initRenderer,
   setupUi,
@@ -25,6 +27,7 @@ init().catch(err => {
 async function init() {
   const { app } = await initRenderer();
   setupUi();
+  if (loadState()) rebuildJunctions();
   setupInput();
 
   app.ticker.add(ticker => {
