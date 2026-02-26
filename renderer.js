@@ -1,6 +1,7 @@
 import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier } from "./geometry.js";
-import { rebuildJunctions, markNetworkDirty, getNodeSegments } from "./network.js";
+import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
+import { buildLanePath } from "./traversal.js";
 
 const app = new PIXI.Application();
 export let canvas = null;
@@ -10,6 +11,7 @@ let junctionGraphics = null;
 let roadsGraphics = null;
 let laneMarkingsGraphics = null;
 let tmpeOverlayGraphics = null;
+let routeGraphics = null;
 let nodeGraphics = null;
 let previewGraphics = null;
 let carsGraphics = null;
@@ -33,6 +35,7 @@ export async function initRenderer() {
   roadsGraphics      = new PIXI.Graphics();
   laneMarkingsGraphics = new PIXI.Graphics();
   tmpeOverlayGraphics  = new PIXI.Graphics();
+  routeGraphics        = new PIXI.Graphics();
   nodeGraphics       = new PIXI.Graphics();
   previewGraphics    = new PIXI.Graphics();
   carsGraphics       = new PIXI.Graphics();
@@ -43,6 +46,7 @@ export async function initRenderer() {
   camera.addChild(roadsGraphics);
   camera.addChild(laneMarkingsGraphics);
   camera.addChild(tmpeOverlayGraphics);
+  camera.addChild(routeGraphics);
   camera.addChild(nodeGraphics);
   camera.addChild(previewGraphics);
   camera.addChild(carsGraphics);
@@ -328,6 +332,85 @@ export function drawPreview() {
   if (state.drawingSegment.snapNodeId) {
     previewGraphics.circle(to.x, to.y, 8 / state.view.zoom);
     previewGraphics.stroke({ width: 2 / state.view.zoom, color: COLORS.nodeSelected });
+  }
+}
+
+export function drawSelectedCarRoute() {
+  routeGraphics.clear();
+  if (state.selectedCarId === null) return;
+  const car = state.cars.find(c => c.id === state.selectedCarId);
+  if (!car) { state.selectedCarId = null; return; }
+
+  const color = car.color;
+  const glow = 8 / state.view.zoom;
+  const thin = 3 / state.view.zoom;
+
+  function strokePolyline(path, fromS = 0) {
+    if (!path || path.points.length < 2) return;
+    const currPos = pointAtPath(path, fromS);
+    // Find first point index strictly after fromS
+    let idx = 0;
+    while (idx < path.cumulative.length - 1 && path.cumulative[idx] <= fromS) idx++;
+    const pts = [currPos, ...path.points.slice(idx)];
+    if (pts.length < 2) return;
+    // Glow pass
+    routeGraphics.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) routeGraphics.lineTo(pts[i].x, pts[i].y);
+    routeGraphics.stroke({ width: glow, color, alpha: 0.25 });
+    // Line pass
+    routeGraphics.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) routeGraphics.lineTo(pts[i].x, pts[i].y);
+    routeGraphics.stroke({ width: thin, color, alpha: 0.9 });
+  }
+
+  // 1. Remaining current phase path
+  if (car.phase === "segment" && car.path) {
+    strokePolyline(car.path, car.s);
+  } else if (car.phase === "junction" && car.junctionPath) {
+    strokePolyline(car.junctionPath, car.junctionS);
+  }
+
+  if (!car.laneSeq) return;
+  const nextStepIdx = car.routeStep + 1;
+
+  // 2. Connector from current segment to next step (segment phase only)
+  if (car.phase === "segment" && nextStepIdx < car.laneSeq.length) {
+    const currStep = car.laneSeq[car.routeStep];
+    const nextStep = car.laneSeq[nextStepIdx];
+    const seg = state.segments.get(currStep.segId);
+    if (seg) {
+      const destNodeId = (currStep.dir === "AtoB") ? seg.nodeB : seg.nodeA;
+      const conn = findConnector(destNodeId, currStep.segId, currStep.dir, currStep.laneIdx,
+                                 nextStep.segId, nextStep.dir, nextStep.laneIdx);
+      if (conn) strokePolyline(conn.path, 0);
+    }
+  }
+
+  // 3. All future laneSeq steps + connectors between them
+  for (let i = nextStepIdx; i < car.laneSeq.length; i++) {
+    const step = car.laneSeq[i];
+    const seg = state.segments.get(step.segId);
+    if (!seg) continue;
+    strokePolyline(buildLanePath(seg, state.nodes, step.dir, step.laneIdx), 0);
+
+    if (i + 1 < car.laneSeq.length) {
+      const nextStep = car.laneSeq[i + 1];
+      const destNodeId = (step.dir === "AtoB") ? seg.nodeB : seg.nodeA;
+      const conn = findConnector(destNodeId, step.segId, step.dir, step.laneIdx,
+                                 nextStep.segId, nextStep.dir, nextStep.laneIdx);
+      if (conn) strokePolyline(conn.path, 0);
+    }
+  }
+
+  // 4. Destination marker
+  if (car.route && car.route.length > 0) {
+    const destNode = state.nodes.get(car.route[car.route.length - 1]);
+    if (destNode) {
+      const r = 10 / state.view.zoom;
+      routeGraphics.circle(destNode.x, destNode.y, r);
+      routeGraphics.fill({ color, alpha: 0.25 });
+      routeGraphics.stroke({ width: 2.5 / state.view.zoom, color, alpha: 0.9 });
+    }
   }
 }
 

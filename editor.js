@@ -1,5 +1,5 @@
 import { state, NODE_SNAP_DIST, GRID } from "./state.js";
-import { snap } from "./geometry.js";
+import { snap, pointAtPath } from "./geometry.js";
 import { addNode, addSegment, removeNode, removeSegment, markNetworkDirty } from "./network.js";
 import { canvas, screenToWorld, setTool } from "./renderer.js";
 
@@ -112,6 +112,20 @@ function hitTest(wx, wy) {
   return null;
 }
 
+/**
+ * Return the id of the car at world position (wx, wy), or null if none.
+ */
+function findCarAt(wx, wy) {
+  const hitRadius = 12;
+  for (const car of state.cars) {
+    const p = (car.phase === "junction" && car.junctionPath)
+      ? pointAtPath(car.junctionPath, car.junctionS)
+      : pointAtPath(car.path, car.s);
+    if (Math.hypot(p.x - wx, p.y - wy) < hitRadius) return car.id;
+  }
+  return null;
+}
+
 function pointSegDist(px, py, x1, y1, x2, y2) {
   const vx = x2 - x1, vy = y2 - y1;
   const wx = px - x1, wy = py - y1;
@@ -147,6 +161,14 @@ function onPointerDown(e) {
   }
 
   if (e.button !== 0) return;
+
+  // Car selection: always check first so you can click a car in any mode
+  const clickedCarId = findCarAt(world.x, world.y);
+  if (clickedCarId !== null) {
+    state.selectedCarId = (state.selectedCarId === clickedCarId) ? null : clickedCarId;
+    return;
+  }
+  state.selectedCarId = null;
 
   if (state.tool === "segment") {
     const snapId = snapToNode(world.x, world.y);

@@ -6,6 +6,7 @@ import {
   drawRoads,
   drawPreview,
   drawCars,
+  drawSelectedCarRoute,
   updateStatus,
 } from "./renderer.js";
 import { setupInput } from "./editor.js";
@@ -34,5 +35,6 @@ function frame(dt) {
   drawGrid();
   drawRoads();
   drawPreview();
+  drawSelectedCarRoute();
   drawCars();
 }

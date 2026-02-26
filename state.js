@@ -53,4 +53,5 @@ export const state = {
   keys: { space: false },
   debugLanes: true,
   signalTime: 0,
+  selectedCarId: null,
 };
