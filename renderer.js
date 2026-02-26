@@ -489,13 +489,13 @@ export function setupUi() {
   }));
   const clearCarsBtn  = document.getElementById("clearCarsBtn");
   const clearAllBtn   = document.getElementById("clearAllBtn");
-  const toolbar       = document.getElementById("toolbar");
-
-  toolbar.addEventListener("click", e => {
+  document.getElementById("toolbar").addEventListener("click", e => {
     const btn = e.target.closest("button[data-tool]");
-    if (!btn) return;
-    const tool = btn.dataset.tool;
-    setTool(tool);
+    if (btn) setTool(btn.dataset.tool);
+  });
+  document.getElementById("toolbar-utils").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-tool]");
+    if (btn) setTool(btn.dataset.tool);
   });
 
   pauseBtn.addEventListener("click", () => {
@@ -718,10 +718,7 @@ export function setTool(tool) {
   state.hoveredLane = null;
   if (canvas) canvas.style.cursor = tool === "select" ? "default" : "crosshair";
 
-  const toolbar = document.getElementById("toolbar");
-  if (toolbar) {
-    toolbar.querySelectorAll("button[data-tool]").forEach(b => {
-      b.classList.toggle("active", b.dataset.tool === tool);
-    });
-  }
+  document.querySelectorAll("button[data-tool]").forEach(b => {
+    b.classList.toggle("active", b.dataset.tool === tool);
+  });
 }
