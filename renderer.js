@@ -439,6 +439,19 @@ export function drawCars() {
   }
 }
 
+export function updatePropertiesPanel() {
+  const panel = document.getElementById("propertiesPanel");
+  const seg = state.selectedSegId !== null ? state.segments.get(state.selectedSegId) : null;
+  if (!seg) {
+    panel.style.display = "none";
+    return;
+  }
+  panel.style.display = "";
+  document.getElementById("atobVal").textContent = seg.lanesAtoB;
+  document.getElementById("btoaVal").textContent = seg.lanesBtoA;
+  document.getElementById("propSpeedBtn").textContent = `${seg.speedLimit} km/h`;
+}
+
 export function updateStatus() {
   updateSpawnButtonLabel();
   const statusEl = document.getElementById("status");
@@ -455,6 +468,22 @@ export function setupUi() {
   const pauseBtn      = document.getElementById("pauseBtn");
   const spawnCarBtn   = document.getElementById("spawnCarBtn");
   const debugLanesBtn = document.getElementById("debugLanesBtn");
+
+  // Properties panel
+  function withSeg(fn) {
+    const seg = state.selectedSegId !== null ? state.segments.get(state.selectedSegId) : null;
+    if (!seg) return;
+    fn(seg);
+    markNetworkDirty();
+  }
+  const SPEED_CYCLE = [30, 50, 80, 120];
+  document.getElementById("atobMinus").addEventListener("click", () => withSeg(s => { if (s.lanesAtoB + s.lanesBtoA > 1) s.lanesAtoB = Math.max(0, s.lanesAtoB - 1); }));
+  document.getElementById("atobPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesAtoB < 4) s.lanesAtoB++; }));
+  document.getElementById("btoaMinus").addEventListener("click", () => withSeg(s => { if (s.lanesAtoB + s.lanesBtoA > 1) s.lanesBtoA = Math.max(0, s.lanesBtoA - 1); }));
+  document.getElementById("btoaPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesBtoA < 4) s.lanesBtoA++; }));
+  document.getElementById("propSpeedBtn").addEventListener("click", () => withSeg(s => {
+    s.speedLimit = SPEED_CYCLE[(SPEED_CYCLE.indexOf(s.speedLimit) + 1) % SPEED_CYCLE.length];
+  }));
   const clearCarsBtn  = document.getElementById("clearCarsBtn");
   const clearAllBtn   = document.getElementById("clearAllBtn");
   const toolbar       = document.getElementById("toolbar");

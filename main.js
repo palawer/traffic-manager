@@ -10,6 +10,7 @@ import {
   drawSelectedCarRoute,
   drawSpeedLabels,
   updateStatus,
+  updatePropertiesPanel,
 } from "./renderer.js";
 import { setupInput } from "./editor.js";
 import { updateCars } from "./simulation.js";
@@ -33,6 +34,7 @@ async function init() {
 function frame(dt) {
   if (!state.paused) updateCars(dt);
   updateStatus();
+  updatePropertiesPanel();
   applyCameraTransform();
   drawGrid();
   drawRoads();

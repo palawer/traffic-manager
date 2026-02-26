@@ -104,6 +104,31 @@ button.active {
   box-shadow: 0 0 0 2px rgba(240, 180, 41, 0.3);
 }
 
+.prop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0;
+}
+
+.prop-label {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.prop-btn {
+  width: 32px;
+  padding: 6px 0;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.prop-row strong {
+  min-width: 18px;
+  text-align: center;
+}
+
 #clearAllBtn {
   background: #5e2222;
 }
