@@ -1,6 +1,7 @@
 import { state } from "./state.js";
 import { normalizeAngle } from "./geometry.js";
 import { getNodeSegments } from "./network.js";
+import { STRAIGHT_THRESHOLD } from "./config.js";
 
 /**
  * A* pathfinding on the node graph.
@@ -134,7 +135,7 @@ export function routeToLaneSequence(routeNodeIds) {
           const inHeading = Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x);
           const outHeading = Math.atan2(nextNode.y - toNode.y, nextNode.x - toNode.x);
           const diff = normalizeAngle(outHeading - inHeading);
-          if (Math.abs(diff) < Math.PI / 6) nextTurnType = "straight";
+          if (Math.abs(diff) < STRAIGHT_THRESHOLD) nextTurnType = "straight";
           else if (diff > 0) nextTurnType = "left";
           else nextTurnType = "right";
         }

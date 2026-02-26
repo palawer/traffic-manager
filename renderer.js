@@ -1,4 +1,5 @@
 import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
+import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
@@ -484,11 +485,11 @@ export function setupUi() {
     markNetworkDirty();
     saveState();
   }
-  const SPEED_CYCLE = [30, 50, 80, 120];
+  const SPEED_CYCLE = SPEED_PRESETS;
   document.getElementById("atobMinus").addEventListener("click", () => withSeg(s => { if (s.lanesAtoB + s.lanesBtoA > 1) s.lanesAtoB = Math.max(0, s.lanesAtoB - 1); }));
-  document.getElementById("atobPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesAtoB < 4) s.lanesAtoB++; }));
+  document.getElementById("atobPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesAtoB < MAX_LANES) s.lanesAtoB++; }));
   document.getElementById("btoaMinus").addEventListener("click", () => withSeg(s => { if (s.lanesAtoB + s.lanesBtoA > 1) s.lanesBtoA = Math.max(0, s.lanesBtoA - 1); }));
-  document.getElementById("btoaPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesBtoA < 4) s.lanesBtoA++; }));
+  document.getElementById("btoaPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesBtoA < MAX_LANES) s.lanesBtoA++; }));
   document.getElementById("propSpeedBtn").addEventListener("click", () => withSeg(s => {
     s.speedLimit = SPEED_CYCLE[(SPEED_CYCLE.indexOf(s.speedLimit) + 1) % SPEED_CYCLE.length];
   }));
@@ -506,7 +507,7 @@ export function setupUi() {
   });
 
   spawnCarBtn.addEventListener("click", () => {
-    state.pendingSpawns += 5;
+    state.pendingSpawns += SPAWN_BATCH;
     updateSpawnButtonLabel();
   });
 

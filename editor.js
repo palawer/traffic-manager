@@ -1,4 +1,9 @@
 import { state, NODE_SNAP_DIST, GRID, LANE_WIDTH } from "./state.js";
+import {
+  HIT_NODE, HIT_SEGMENT, HIT_CAR, HIT_LANE, HIT_CONNECTOR_EP,
+  SIGNAL_PHASE_DURATION, SPEED_PRESETS, MAX_LANES,
+  ZOOM_SENSITIVITY, ZOOM_MIN, ZOOM_MAX,
+} from "./config.js";
 import { snap, pointAtPath } from "./geometry.js";
 import { addNode, addSegment, removeNode, removeSegment, markNetworkDirty, rebuildJunctions } from "./network.js";
 import { canvas, screenToWorld, setTool } from "./renderer.js";
@@ -92,7 +97,7 @@ function segmentsConflict(p1, p2, p3, p4, fromId, toId, segA, segB) {
  */
 function hitTest(wx, wy) {
   // Check nodes first
-  let bestNode = null, bestNodeDist = 12 / state.view.zoom;
+  let bestNode = null, bestNodeDist = HIT_NODE / state.view.zoom;
   for (const node of state.nodes.values()) {
     const d = Math.hypot(node.x - wx, node.y - wy);
     if (d < bestNodeDist) { bestNodeDist = d; bestNode = node.id; }
@@ -100,7 +105,7 @@ function hitTest(wx, wy) {
   if (bestNode !== null) return { type: "node", id: bestNode };
 
   // Check segments (point-to-segment distance)
-  let bestSeg = null, bestSegDist = 20 / state.view.zoom;
+  let bestSeg = null, bestSegDist = HIT_SEGMENT / state.view.zoom;
   for (const seg of state.segments.values()) {
     const nA = state.nodes.get(seg.nodeA);
     const nB = state.nodes.get(seg.nodeB);
@@ -117,7 +122,7 @@ function hitTest(wx, wy) {
  * Return the id of the car at world position (wx, wy), or null if none.
  */
 function findCarAt(wx, wy) {
-  const hitRadius = 12;
+  const hitRadius = HIT_CAR;
   for (const car of state.cars) {
     const p = (car.phase === "junction" && car.junctionPath)
       ? pointAtPath(car.junctionPath, car.junctionS)
@@ -139,7 +144,7 @@ function pointSegDist(px, py, x1, y1, x2, y2) {
  * Find which lane the cursor is over. Returns { segId, dir, laneIdx } or null.
  */
 function laneHitTest(wx, wy) {
-  let bestSeg = null, bestDist = LANE_WIDTH * 1.5;
+  let bestSeg = null, bestDist = HIT_LANE;
   for (const seg of state.segments.values()) {
     const nA = state.nodes.get(seg.nodeA);
     const nB = state.nodes.get(seg.nodeB);
@@ -228,7 +233,7 @@ function createDefaultSignal(nodeId) {
     for (const conn of conns) target.add(conn.id);
   });
 
-  const dur = 15;
+  const dur = SIGNAL_PHASE_DURATION;
   state.signals.set(nodeId, {
     nodeId,
     phases: [
@@ -274,7 +279,7 @@ function toggleUserConnector(nodeId, inKey, outKey) {
 
 function handleConnectorToolClick(wx, wy) {
   const ct = state.connectorTool;
-  const hitRadius = 14 / state.view.zoom;
+  const hitRadius = HIT_CONNECTOR_EP / state.view.zoom;
 
   if (ct.editingNodeId === null) {
     // Enter edit mode: click near a node that has a junction
@@ -363,7 +368,7 @@ function onPointerDown(e) {
     if (hit && hit.type === "segment") {
       const seg = state.segments.get(hit.id);
       if (seg) {
-        const cycle = [30, 50, 80, 120];
+        const cycle = SPEED_PRESETS;
         const idx = cycle.indexOf(seg.speedLimit);
         seg.speedLimit = cycle[(idx + 1) % cycle.length];
       }
@@ -528,8 +533,8 @@ function onPointerUp(e) {
 
 function onWheel(e) {
   const before = screenToWorld(e.offsetX, e.offsetY);
-  const factor = Math.exp(-e.deltaY * 0.0012);
-  state.view.zoom = Math.max(0.2, Math.min(4, state.view.zoom * factor));
+  const factor = Math.exp(-e.deltaY * ZOOM_SENSITIVITY);
+  state.view.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, state.view.zoom * factor));
   const after = screenToWorld(e.offsetX, e.offsetY);
   state.view.x += before.x - after.x;
   state.view.y += before.y - after.y;

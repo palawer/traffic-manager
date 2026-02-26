@@ -1,4 +1,5 @@
 import { state } from "./state.js";
+import { MAX_DT } from "./config.js";
 import { loadState } from "./persistence.js";
 import { rebuildJunctions } from "./network.js";
 import {
@@ -32,7 +33,7 @@ async function init() {
   setupInput();
 
   app.ticker.add(ticker => {
-    const dt = Math.min(ticker.deltaMS / 1000, 0.05);
+    const dt = Math.min(ticker.deltaMS / 1000, MAX_DT);
     frame(dt);
   });
 }

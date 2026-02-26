@@ -1,8 +1,5 @@
-export const LANE_WIDTH = 22;
-export const ROAD_WIDTH = 44; // kept for compat (2 lanes)
-export const GRID = 20;
-export const NODE_SNAP_DIST = 20;
-export const JOIN_GRACE_TIME = 0.4;
+export { LANE_WIDTH, GRID, NODE_SNAP_DIST, JOIN_GRACE_TIME } from "./config.js";
+export const ROAD_WIDTH = 44; // kept for compat (2 × LANE_WIDTH)
 
 export const COLORS = {
   bg: 0xd9e5db,

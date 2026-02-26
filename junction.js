@@ -1,5 +1,6 @@
 import { LANE_WIDTH } from "./state.js";
 import { normalizeAngle, junctionInset, laneEndpointWorld, buildConnectorBezier, polylineMetrics } from "./geometry.js";
+import { STRAIGHT_THRESHOLD } from "./config.js";
 
 /**
  * Classify a turn from inHeading (arriving) to outHeading (departing).
@@ -7,7 +8,7 @@ import { normalizeAngle, junctionInset, laneEndpointWorld, buildConnectorBezier,
  */
 function classifyTurn(inHeading, outHeading) {
   const diff = normalizeAngle(outHeading - inHeading);
-  if (Math.abs(diff) < Math.PI / 6) return "straight"; // < 30°
+  if (Math.abs(diff) < STRAIGHT_THRESHOLD) return "straight";
   if (diff > 0) return "left";
   return "right";
 }

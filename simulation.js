@@ -1,4 +1,11 @@
 import { state, JOIN_GRACE_TIME } from "./state.js";
+import {
+  SPAWN_CLEARANCE, SPAWN_MAX_ATTEMPTS,
+  SPEED_FACTOR_MIN, SPEED_FACTOR_RANGE,
+  CAR_ACCEL, CAR_BRAKE,
+  CAR_STOP_DIST, CAR_SLOW_DIST, CAR_SLOW_FACTOR,
+  JUNCTION_LOOKAHEAD, JUNCTION_STOP_DIST, JUNCTION_ENTRY_THRESHOLD,
+} from "./config.js";
 import { pointAtPath, headingAtPath, hslToHex } from "./geometry.js";
 import { rebuildJunctions, getNodeSegments, findConnector, getDestinationNode } from "./network.js";
 import { findRoute, routeToLaneSequence } from "./router.js";
@@ -80,7 +87,7 @@ export function spawnCar() {
   const head = pointAtPath(lanePath, 0);
   for (const other of state.cars) {
     const op = pointAtPath(other.path, other.s);
-    if (Math.hypot(op.x - head.x, op.y - head.y) < 35) return false;
+    if (Math.hypot(op.x - head.x, op.y - head.y) < SPAWN_CLEARANCE) return false;
   }
 
   const car = {
@@ -102,9 +109,9 @@ export function spawnCar() {
     junctionS: 0,
     junctionPath: null,
     // motion
-    speedFactor: 0.85 + Math.random() * 0.2,   // per-car personality (0.85–1.05)
+    speedFactor: SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE,
     speed: 0,
-    desiredSpeed: seg.speedLimit * (0.85 + Math.random() * 0.2),
+    desiredSpeed: seg.speedLimit * (SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE),
     joinGrace: 0,
     waiting: false,
   };
@@ -131,7 +138,7 @@ export function updateCars(dt) {
 
   // Spawn pending cars
   if (state.pendingSpawns > 0) {
-    const maxAttempts = 6;
+    const maxAttempts = SPAWN_MAX_ATTEMPTS;
     for (let i = 0; i < maxAttempts && state.pendingSpawns > 0; i++) {
       if (spawnCar()) state.pendingSpawns--;
     }
@@ -163,7 +170,7 @@ function updateCarOnSegment(car, dt) {
     ? car.laneSeq[car.routeStep + 1] : null;
 
   // Look ahead to junction
-  if (remToEnd < 50 && seg) {
+  if (remToEnd < JUNCTION_LOOKAHEAD && seg) {
     const destNodeId = getDestinationNode(seg, car.dir);
     const junc = state.junctions.get(destNodeId);
 
@@ -175,13 +182,13 @@ function updateCarOnSegment(car, dt) {
         if (!isConnectorGreen(conn)) target = 0;
         if (isJunctionBlocked(conn)) target = 0;
       } else {
-        if (remToEnd < 5) target = 0;
+        if (remToEnd < JUNCTION_STOP_DIST) target = 0;
       }
     }
   }
 
-  if (obstacleDist < 24) target = 0;
-  else if (obstacleDist < 40) target *= 0.4;
+  if (obstacleDist < CAR_STOP_DIST) target = 0;
+  else if (obstacleDist < CAR_SLOW_DIST) target *= CAR_SLOW_FACTOR;
 
   applyAcceleration(car, target, dt);
 
@@ -237,8 +244,8 @@ function updateCarOnJunction(car, dt) {
   }
 
   let target = car.desiredSpeed;
-  if (obstacleDist < 24) target = 0;
-  else if (obstacleDist < 40) target *= 0.4;
+  if (obstacleDist < CAR_STOP_DIST) target = 0;
+  else if (obstacleDist < CAR_SLOW_DIST) target *= CAR_SLOW_FACTOR;
 
   applyAcceleration(car, target, dt);
   car.junctionS += car.speed * dt;
@@ -279,7 +286,7 @@ function isJunctionBlocked(conn) {
     if (car.phase !== "junction") continue;
     if (car.connectorId !== conn.id) continue;
     // Allow entry if the car ahead is already well into the connector
-    if (car.junctionPath && car.junctionS > 30) continue;
+    if (car.junctionPath && car.junctionS > JUNCTION_ENTRY_THRESHOLD) continue;
     return true;
   }
   return false;
@@ -320,7 +327,7 @@ function advanceRouteStepIfMatches(car, segId, dir, laneIdx) {
 }
 
 function applyAcceleration(car, target, dt) {
-  const accel = target > car.speed ? 60 : 100;
+  const accel = target > car.speed ? CAR_ACCEL : CAR_BRAKE;
   const delta = target - car.speed;
   const step = Math.sign(delta) * Math.min(Math.abs(delta), accel * dt);
   car.speed = Math.max(0, car.speed + step);

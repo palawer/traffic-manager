@@ -1,4 +1,5 @@
 import { GRID, LANE_WIDTH } from "./state.js";
+import { JUNCTION_PADDING, CONNECTOR_BEZIER_STEPS, CONNECTOR_BEZIER_FACTOR, CONNECTOR_BEZIER_MIN } from "./config.js";
 
 export function snap(v, step = GRID) {
   return Math.round(v / step) * step;
@@ -118,7 +119,7 @@ export function junctionInset(seg, allSegsAtNode) {
   }
   // If only one segment at node (dead-end), no inset needed
   if (allSegsAtNode.length <= 1) return 0;
-  return maxHalf + 4;
+  return maxHalf + JUNCTION_PADDING;
 }
 
 /**
@@ -202,7 +203,7 @@ export function laneEndpointWorld(seg, nodes, allSegsAtNode, nodeId, laneIdx, di
  */
 export function buildConnectorBezier(fromEp, toEp) {
   const dist = Math.hypot(toEp.x - fromEp.x, toEp.y - fromEp.y);
-  const h = Math.max(dist * 0.4, 10);
+  const h = Math.max(dist * CONNECTOR_BEZIER_FACTOR, CONNECTOR_BEZIER_MIN);
   const c1 = {
     x: fromEp.x + Math.cos(fromEp.heading) * h,
     y: fromEp.y + Math.sin(fromEp.heading) * h,
@@ -212,6 +213,6 @@ export function buildConnectorBezier(fromEp, toEp) {
     y: toEp.y - Math.sin(toEp.heading) * h,
   };
   const pts = [];
-  for (let i = 0; i <= 12; i++) pts.push(bezierPoint(fromEp, c1, c2, toEp, i / 12));
+  for (let i = 0; i <= CONNECTOR_BEZIER_STEPS; i++) pts.push(bezierPoint(fromEp, c1, c2, toEp, i / CONNECTOR_BEZIER_STEPS));
   return pts;
 }
