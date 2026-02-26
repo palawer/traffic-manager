@@ -313,13 +313,16 @@ function onPointerDown(e) {
     if (state.drawingSegment === null) {
       // Start drawing: use existing or create new node
       let fromId;
+      let fromIsNew = false;
       if (snapId !== null) {
         fromId = snapId;
       } else {
         fromId = addNode(snap(world.x), snap(world.y));
+        fromIsNew = true;
       }
       state.drawingSegment = {
         fromNodeId: fromId,
+        fromIsNew,
         toWorld: { x: world.x, y: world.y },
         snapNodeId: null,
       };
@@ -465,6 +468,9 @@ function onKeyDown(e) {
     if (canvas) canvas.style.cursor = "grab";
   }
   if (e.key === "Escape") {
+    if (state.drawingSegment?.fromIsNew) {
+      removeNode(state.drawingSegment.fromNodeId);
+    }
     state.drawingSegment = null;
     dragNodeId = null;
   }
