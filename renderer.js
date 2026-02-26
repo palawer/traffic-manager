@@ -236,20 +236,6 @@ export function drawRoads() {
     const nx = -uy, ny = ux;
     const halfW = totalWidth / 2;
 
-    // Edge lines (both sides)
-    const leftEdgeX = pA.x - nx * halfW;
-    const leftEdgeY = pA.y - ny * halfW;
-    const rightEdgeX = pA.x + nx * halfW;
-    const rightEdgeY = pA.y + ny * halfW;
-
-    laneMarkingsGraphics.moveTo(leftEdgeX, leftEdgeY)
-      .lineTo(pB.x - nx * halfW, pB.y - ny * halfW);
-    laneMarkingsGraphics.stroke({ width: lw, color: COLORS.edgeLine });
-
-    laneMarkingsGraphics.moveTo(rightEdgeX, rightEdgeY)
-      .lineTo(pB.x + nx * halfW, pB.y + ny * halfW);
-    laneMarkingsGraphics.stroke({ width: lw, color: COLORS.edgeLine });
-
     // Centerline (yellow dashes if 2-way)
     if (seg.lanesAtoB > 0 && seg.lanesBtoA > 0) {
       drawDashedLine(laneMarkingsGraphics, pA, pB, 0, lw * 1.2, COLORS.centerline, 16, 8);
