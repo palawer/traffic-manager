@@ -979,7 +979,8 @@ function buildRoundaboutDeadEndTurnaround(piece, connectorIdx) {
 function buildTraversal(piece, fromConnectorIdx) {
   const def = PIECES[piece.type];
   if (piece.type === "traffic_light_cross") {
-    const exits = [0, 1, 2, 3].filter((i) => i !== fromConnectorIdx);
+    const opposite = (fromConnectorIdx + 2) % 4;
+    const exits = [0, 1, 2, 3].filter((i) => i !== fromConnectorIdx && i !== opposite);
     const toConnectorIdx = exits[Math.floor(Math.random() * exits.length)];
     const worldPoints = buildTrafficLightPath(piece, fromConnectorIdx, toConnectorIdx);
     return { path: polylineMetrics(worldPoints), toConnectorIdx };
@@ -1119,12 +1120,21 @@ function assignTraversalWithBlend(car, nextPiece, fromConnectorIdx) {
   if (!nextTraversal || nextTraversal.path.length < 1) return false;
 
   const pStart = pointAtPath(car.path, car.path.length);
-  const hStart = headingAtPath(car.path, Math.max(0, car.path.length - 1));
   const pEnd = nextTraversal.path.points[0];
-  const hEnd = headingAtPath(nextTraversal.path, Math.min(nextTraversal.path.length, 2));
-  const blend = buildBezierPolyline(pStart, hStart, pEnd, hEnd, JOIN_BLEND_HANDLE, 8);
-  const combined = [...blend, ...nextTraversal.path.points.slice(1)];
-  const combinedPath = polylineMetrics(combined);
+  const gap = Math.hypot(pEnd.x - pStart.x, pEnd.y - pStart.y);
+
+  let combinedPath;
+  if (gap < 4) {
+    // Piezas encajadas: el bezier de mezcla con p0==p1 genera un bucle que hace
+    // que el coche zigzaguee en la juntura. Usar el path directamente.
+    combinedPath = nextTraversal.path;
+  } else {
+    const hStart = headingAtPath(car.path, Math.max(0, car.path.length - 1));
+    const hEnd = headingAtPath(nextTraversal.path, Math.min(nextTraversal.path.length, 2));
+    const blend = buildBezierPolyline(pStart, hStart, pEnd, hEnd, JOIN_BLEND_HANDLE, 8);
+    const combined = [...blend, ...nextTraversal.path.points.slice(1)];
+    combinedPath = polylineMetrics(combined);
+  }
   if (combinedPath.length < 1) return false;
 
   car.pieceId = nextPiece.id;
@@ -1137,7 +1147,7 @@ function assignTraversalWithBlend(car, nextPiece, fromConnectorIdx) {
     : PIECES[nextPiece.type].isTrafficLightCross
       ? junctionExitOrdinal(fromConnectorIdx, nextTraversal.toConnectorIdx)
       : null;
-  car.s = Math.min(JOIN_ENTRY_OFFSET, Math.max(0, car.path.length * 0.25));
+  car.s = gap < 4 ? 0 : Math.min(JOIN_ENTRY_OFFSET, Math.max(0, combinedPath.length * 0.25));
   car.joinGrace = JOIN_GRACE_TIME;
   car.waiting = false;
   return true;
@@ -1286,9 +1296,13 @@ function updateCars(dt) {
 
     for (const other of state.cars) {
       if (other === car) continue;
+      if (other.pieceId !== car.pieceId) continue;          // sólo misma pieza
+      if (other.path.length - other.s < 2 && other.speed > 2) continue; // a punto de transicionar (no si está parado esperando)
       const op = pointAtPath(other.path, other.s);
       const dist = Math.hypot(op.x - myPos.x, op.y - myPos.y);
       if (dist > 60) continue;
+      const otherHeading = headingAtPath(other.path, other.s);
+      if (Math.abs(normalizeAngle(otherHeading - myHeading)) > Math.PI / 2) continue; // ignora coches en sentido contrario
       const toOther = Math.atan2(op.y - myPos.y, op.x - myPos.x);
       const rel = Math.abs(normalizeAngle(toOther - myHeading));
 
@@ -1311,6 +1325,9 @@ function updateCars(dt) {
         const next = parseConnectorKey(nextKey);
         const nextPiece = pieceById(next.pieceId);
         if (nextPiece && PIECES[nextPiece.type].isTrafficLightCross && !isTrafficLightGreen(nextPiece, next.connectorIndex)) {
+          target = 0;
+        }
+        if (nextPiece && PIECES[nextPiece.type].isRoundabout && isRoundaboutEntryBlocked(nextPiece, next.connectorIndex)) {
           target = 0;
         }
       }
@@ -1387,12 +1404,17 @@ function updateCars(dt) {
 
   // Consume cola de spawns: clicks rápidos se respetan y no se pierden.
   if (state.pendingSpawns > 0) {
-    const maxAttemptsPerFrame = 6;
-    let attempts = 0;
-    while (state.pendingSpawns > 0 && attempts < maxAttemptsPerFrame) {
-      if (!spawnCar()) break;
-      state.pendingSpawns -= 1;
-      attempts += 1;
+    if (state.networkDirty) rebuildNetwork();
+    if (state.connectors.length === 0) {
+      state.pendingSpawns = 0;
+    } else {
+      const maxAttemptsPerFrame = 6;
+      let attempts = 0;
+      while (state.pendingSpawns > 0 && attempts < maxAttemptsPerFrame) {
+        if (!spawnCar()) break;
+        state.pendingSpawns -= 1;
+        attempts += 1;
+      }
     }
   }
 }
@@ -1705,13 +1727,15 @@ function drawCars() {
       if (piece && (PIECES[piece.type].isRoundabout || PIECES[piece.type].isTrafficLightCross)) {
         let label = carDebugLabels.get(car.id);
         if (!label) {
-          label = new PIXI.Text("", {
-            fontFamily: "monospace",
-            fontSize: 11,
-            fill: 0xffffff,
-            stroke: 0x172028,
-            strokeThickness: 3,
-            align: "center",
+          label = new PIXI.Text({
+            text: "",
+            style: {
+              fontFamily: "monospace",
+              fontSize: 11,
+              fill: 0xffffff,
+              stroke: { color: 0x172028, width: 3 },
+              align: "center",
+            },
           });
           label.anchor.set(0.5);
           carDebugLabels.set(car.id, label);
