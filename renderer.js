@@ -47,6 +47,7 @@ export async function initRenderer() {
   camera.addChild(junctionGraphics);
   camera.addChild(roadsGraphics);
   camera.addChild(laneMarkingsGraphics);
+  camera.addChild(speedLabelsContainer);
   camera.addChild(tmpeOverlayGraphics);
   camera.addChild(routeGraphics);
   camera.addChild(nodeGraphics);
