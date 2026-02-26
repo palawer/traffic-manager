@@ -1,5 +1,5 @@
 import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
-import { pointAtPath, headingAtPath, junctionInset } from "./geometry.js";
+import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments } from "./network.js";
 
 const app = new PIXI.Application();
@@ -130,6 +130,49 @@ function segmentInsetPoints(seg) {
   };
 }
 
+/**
+ * For a node where exactly two segments meet, fill the bend by stroking
+ * a bezier along the road centreline with the full road width.
+ */
+function drawBendJunction(g, nodeId, segs) {
+  const node = state.nodes.get(nodeId);
+  if (!node) return;
+  const [s1, s2] = segs;
+
+  const other1 = state.nodes.get(s1.nodeA === nodeId ? s1.nodeB : s1.nodeA);
+  const other2 = state.nodes.get(s2.nodeA === nodeId ? s2.nodeB : s2.nodeA);
+  if (!other1 || !other2) return;
+
+  // Angle from node outward along each segment
+  const a1 = Math.atan2(other1.y - node.y, other1.x - node.x);
+  const a2 = Math.atan2(other2.y - node.y, other2.x - node.x);
+
+  const inset1 = junctionInset(s1, segs);
+  const inset2 = junctionInset(s2, segs);
+
+  // Stop-line centres (road axis, no lane offset)
+  const from = {
+    x: node.x + Math.cos(a1) * inset1,
+    y: node.y + Math.sin(a1) * inset1,
+    heading: a1 + Math.PI,   // direction of travel arriving from s1
+  };
+  const to = {
+    x: node.x + Math.cos(a2) * inset2,
+    y: node.y + Math.sin(a2) * inset2,
+    heading: a2,              // direction of travel departing into s2
+  };
+
+  const pts = buildConnectorBezier(from, to);
+  const w = Math.max(
+    (s1.lanesAtoB + s1.lanesBtoA) * LANE_WIDTH,
+    (s2.lanesAtoB + s2.lanesBtoA) * LANE_WIDTH
+  );
+
+  g.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+  g.stroke({ width: w, color: COLORS.road, cap: "round", join: "round" });
+}
+
 export function drawRoads() {
   if (state.networkDirty) rebuildJunctions();
 
@@ -139,14 +182,19 @@ export function drawRoads() {
 
   const lw = 1.5 / state.view.zoom;
 
-  // Draw junction polygons
+  // Draw junctions
   for (const [nodeId, junc] of state.junctions) {
-    if (!junc.polygon || junc.polygon.length < 3) continue;
-    const pts = junc.polygon;
-    const flat = [];
-    for (const p of pts) { flat.push(p.x, p.y); }
-    junctionGraphics.poly(flat);
-    junctionGraphics.fill(COLORS.junction);
+    const segsAtNode = getNodeSegments(nodeId);
+
+    if (segsAtNode.length === 2) {
+      // Two-road bend: stroke the road-centre bezier with full road width
+      drawBendJunction(junctionGraphics, nodeId, segsAtNode);
+    } else if (junc.polygon && junc.polygon.length >= 3) {
+      // Three+ roads: filled convex polygon
+      const flat = junc.polygon.flatMap(p => [p.x, p.y]);
+      junctionGraphics.poly(flat);
+      junctionGraphics.fill(COLORS.junction);
+    }
   }
 
   // Draw segment bodies
@@ -272,8 +320,9 @@ export function drawPreview() {
   if (!to) return;
 
   const totalWidth = 2 * LANE_WIDTH; // default 1+1
+  const invalid = !!state.drawingSegment.invalid;
   previewGraphics.moveTo(fromNode.x, fromNode.y).lineTo(to.x, to.y);
-  previewGraphics.stroke({ width: totalWidth, color: COLORS.previewRoad, alpha: 0.5, cap: "round" });
+  previewGraphics.stroke({ width: totalWidth, color: invalid ? 0xdd3333 : COLORS.previewRoad, alpha: 0.55, cap: "round" });
 
   // Show snap circle at destination
   if (state.drawingSegment.snapNodeId) {

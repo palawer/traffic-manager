@@ -17,6 +17,75 @@ function snapToNode(wx, wy) {
 }
 
 /**
+ * Returns true if a new segment fromId→toId would geometrically cross or overlap
+ * any existing segment (shared endpoints at junction nodes are allowed).
+ */
+function wouldOverlap(fromId, toId) {
+  const p1 = state.nodes.get(fromId);
+  const p2 = state.nodes.get(toId);
+  if (!p1 || !p2) return false;
+
+  for (const seg of state.segments.values()) {
+    const p3 = state.nodes.get(seg.nodeA);
+    const p4 = state.nodes.get(seg.nodeB);
+    if (!p3 || !p4) continue;
+
+    // Skip — duplicate segment already blocked by addSegment
+    const dup = (fromId === seg.nodeA && toId === seg.nodeB) ||
+                (fromId === seg.nodeB && toId === seg.nodeA);
+    if (dup) continue;
+
+    if (segmentsConflict(p1, p2, p3, p4, fromId, toId, seg.nodeA, seg.nodeB)) return true;
+  }
+  return false;
+}
+
+/**
+ * Returns true if segment p1-p2 conflicts with segment p3-p4.
+ * Conflict = they cross or overlap at a non-shared-endpoint point.
+ */
+function segmentsConflict(p1, p2, p3, p4, fromId, toId, segA, segB) {
+  const dx1 = p2.x - p1.x, dy1 = p2.y - p1.y;
+  const dx2 = p4.x - p3.x, dy2 = p4.y - p3.y;
+  const denom = dx1 * dy2 - dy1 * dx2;
+
+  if (Math.abs(denom) < 1e-6) {
+    // Parallel: check if collinear
+    const cross = (p3.x - p1.x) * dy1 - (p3.y - p1.y) * dx1;
+    const lenSq = dx1 * dx1 + dy1 * dy1;
+    if (lenSq < 1e-10 || Math.abs(cross) > 1e-4 * Math.sqrt(lenSq)) return false;
+
+    // Collinear: check if the projected intervals on p1→p2 overlap beyond a shared endpoint
+    const t3 = ((p3.x - p1.x) * dx1 + (p3.y - p1.y) * dy1) / lenSq;
+    const t4 = ((p4.x - p1.x) * dx1 + (p4.y - p1.y) * dy1) / lenSq;
+    const overlapMin = Math.max(0, Math.min(t3, t4));
+    const overlapMax = Math.min(1, Math.max(t3, t4));
+    return overlapMax - overlapMin > 1e-6;
+  }
+
+  // General case: compute intersection parameters
+  const dx3 = p3.x - p1.x, dy3 = p3.y - p1.y;
+  const t = (dx3 * dy2 - dy3 * dx2) / denom;
+  const u = (dx3 * dy1 - dy3 * dx1) / denom;
+  const eps = 1e-6;
+
+  if (t < -eps || t > 1 + eps || u < -eps || u > 1 + eps) return false; // no intersection
+
+  // Intersection exists — allow it only if it's exactly at a shared endpoint node
+  const atP1 = t < eps;  // intersection at p1 (fromId)
+  const atP2 = t > 1 - eps; // intersection at p2 (toId)
+  const atP3 = u < eps;  // intersection at p3 (segA)
+  const atP4 = u > 1 - eps; // intersection at p4 (segB)
+
+  if (atP1 && atP3 && fromId === segA) return false;
+  if (atP1 && atP4 && fromId === segB) return false;
+  if (atP2 && atP3 && toId   === segA) return false;
+  if (atP2 && atP4 && toId   === segB) return false;
+
+  return true; // conflict
+}
+
+/**
  * Find the node or segment under the cursor.
  * Returns { type: "node"|"segment", id } or null.
  */
@@ -98,6 +167,7 @@ function onPointerDown(e) {
       // Finish drawing
       const fromId = state.drawingSegment.fromNodeId;
       let toId;
+      let autoCreated = false;
       if (snapId !== null && snapId !== fromId) {
         toId = snapId;
       } else if (snapId === fromId) {
@@ -106,7 +176,15 @@ function onPointerDown(e) {
         return;
       } else {
         toId = addNode(snap(world.x), snap(world.y));
+        autoCreated = true;
       }
+
+      if (wouldOverlap(fromId, toId)) {
+        // Reject — clean up the auto-created node if it was just made
+        if (autoCreated) removeNode(toId);
+        return;
+      }
+
       addSegment(fromId, toId);
       // Continue drawing from the new endpoint
       const toNode = state.nodes.get(toId);
@@ -175,6 +253,17 @@ function onPointerMove(e) {
     } else {
       state.drawingSegment.toWorld = { x: world.x, y: world.y };
       state.drawingSegment.snapNodeId = null;
+    }
+    // Check validity for preview colouring
+    const fromId = state.drawingSegment.fromNodeId;
+    if (state.drawingSegment.snapNodeId) {
+      state.drawingSegment.invalid = wouldOverlap(fromId, state.drawingSegment.snapNodeId);
+    } else {
+      const tw = state.drawingSegment.toWorld;
+      const phantom = { id: -1, x: snap(tw.x), y: snap(tw.y) };
+      state.nodes.set(-1, phantom);
+      state.drawingSegment.invalid = wouldOverlap(fromId, -1);
+      state.nodes.delete(-1);
     }
   }
 }

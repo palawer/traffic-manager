@@ -54,71 +54,42 @@ function getDepartureEndpoint(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
 
 /**
  * Build polygon for the junction area (for rendering).
- * segsAtNode: array of segments connected to nodeId
+ * Strategy: collect both stop-line corners for every segment, then sort them
+ * by angle around the node centre. This naturally produces the correct convex
+ * shape (chamfered square for a 4-way, hexagon for a T-junction, etc.) with
+ * no arcs needed.
  */
 function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
   const node = nodes.get(nodeId);
   if (!node || segsAtNode.length < 2) return [];
 
-  let maxHalf = 0;
-  for (const seg of segsAtNode) {
-    const half = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH / 2;
-    if (half > maxHalf) maxHalf = half;
-  }
+  const corners = [];
 
-  // Sort segments by angle from node
-  const segAngles = segsAtNode.map(seg => {
+  for (const seg of segsAtNode) {
     const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
     const other = nodes.get(otherId);
-    return { seg, angle: Math.atan2(other.y - node.y, other.x - node.x) };
-  }).sort((a, b) => a.angle - b.angle);
+    if (!other) continue;
 
-  const pts = [];
-  const n = segAngles.length;
-
-  for (let i = 0; i < n; i++) {
-    const { seg, angle } = segAngles[i];
-    const half = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH / 2;
+    const angle = Math.atan2(other.y - node.y, other.x - node.x);
+    const half  = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH / 2;
     const inset = junctionInset(seg, segsAtNode);
 
     const stopX = node.x + Math.cos(angle) * inset;
     const stopY = node.y + Math.sin(angle) * inset;
     const perpX = -Math.sin(angle);
-    const perpY = Math.cos(angle);
+    const perpY =  Math.cos(angle);
 
-    const rc = { x: stopX - perpX * half, y: stopY - perpY * half };
-    const lc = { x: stopX + perpX * half, y: stopY + perpY * half };
-    pts.push(rc);
-
-    const next = segAngles[(i + 1) % n];
-    const nextAngle = next.angle;
-    const nextHalf = (next.seg.lanesAtoB + next.seg.lanesBtoA) * LANE_WIDTH / 2;
-    const nextInset = junctionInset(next.seg, segsAtNode);
-    const nextStopX = node.x + Math.cos(nextAngle) * nextInset;
-    const nextStopY = node.y + Math.sin(nextAngle) * nextInset;
-    const nextPerpX = -Math.sin(nextAngle);
-    const nextPerpY = Math.cos(nextAngle);
-    const nextRc = { x: nextStopX - nextPerpX * nextHalf, y: nextStopY - nextPerpY * nextHalf };
-
-    // Fillet arc between lc and nextRc, curving around the node
-    const aStart = Math.atan2(lc.y - node.y, lc.x - node.x);
-    const aEnd = Math.atan2(nextRc.y - node.y, nextRc.x - node.x);
-    const rFillet = Math.max(
-      Math.hypot(lc.x - node.x, lc.y - node.y),
-      Math.hypot(nextRc.x - node.x, nextRc.y - node.y),
-      maxHalf + 2
-    );
-
-    let sweep = normalizeAngle(aEnd - aStart);
-    if (sweep < 0) sweep += Math.PI * 2;
-    const steps = Math.max(2, Math.ceil(sweep / 0.3));
-    for (let k = 0; k <= steps; k++) {
-      const a = aStart + (sweep * k) / steps;
-      pts.push({ x: node.x + Math.cos(a) * rFillet, y: node.y + Math.sin(a) * rFillet });
-    }
+    corners.push({ x: stopX - perpX * half, y: stopY - perpY * half });
+    corners.push({ x: stopX + perpX * half, y: stopY + perpY * half });
   }
 
-  return pts;
+  // Sort corners by angle around the node → convex polygon in winding order
+  corners.sort((a, b) =>
+    Math.atan2(a.y - node.y, a.x - node.x) -
+    Math.atan2(b.y - node.y, b.x - node.x)
+  );
+
+  return corners;
 }
 
 /**
