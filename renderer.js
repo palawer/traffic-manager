@@ -642,7 +642,9 @@ export function drawSignals() {
       if (conn.path.points.length === 0) continue;
 
       const pt = conn.path.points[0];
-      const isGreen = phase?.greenConnectors.has(`${conn.inSegId}:${conn.inDir}`) ?? true;
+      const armKey = `${conn.inSegId}:${conn.inDir}`;
+      const isManaged = signal?.phases.some(p => p.greenConnectors.has(armKey));
+      const isGreen = !isManaged || (phase?.greenConnectors.has(armKey) ?? true);
       const color = isGreen ? COLORS.trafficGreen : COLORS.trafficRed;
       const r = 5;
 

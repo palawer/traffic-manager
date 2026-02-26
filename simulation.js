@@ -19,9 +19,14 @@ export function isConnectorGreen(connector) {
   if (!connector) return true;
   const signal = state.signals.get(connector.nodeId);
   if (!signal) return true;
+  const armKey = `${connector.inSegId}:${connector.inDir}`;
+  // If this arm isn't explicitly assigned to any phase (e.g. old saved data
+  // with integer IDs, or a new segment added to an existing junction),
+  // treat it as unmanaged → always green.
+  const isManaged = signal.phases.some(p => p.greenConnectors.has(armKey));
+  if (!isManaged) return true;
   const phase = signal.phases[signal.currentPhase];
-  if (!phase) return true;
-  return phase.greenConnectors.has(`${connector.inSegId}:${connector.inDir}`);
+  return phase?.greenConnectors.has(armKey) ?? true;
 }
 
 /**
