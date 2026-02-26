@@ -1,3 +1,4 @@
+import { state } from "./state.js";
 import {
   initRenderer,
   setupUi,
@@ -29,7 +30,7 @@ async function init() {
 }
 
 function frame(dt) {
-  updateCars(dt);
+  if (!state.paused) updateCars(dt);
   updateStatus();
   applyCameraTransform();
   drawGrid();

@@ -52,6 +52,7 @@ export const state = {
   lastMouse: { x: 0, y: 0 },
   keys: { space: false },
   debugLanes: true,
+  paused: false,
   signalTime: 0,
   selectedCarId: null,
 };

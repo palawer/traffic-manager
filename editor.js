@@ -329,6 +329,7 @@ function onKeyDown(e) {
   // Tool shortcuts
   if (e.key === "r" || e.key === "R") setTool("segment");
   if (e.key === "s" || e.key === "S") setTool("select");
+  if (e.key === "p" || e.key === "P") document.getElementById("pauseBtn")?.click();
 }
 
 function onKeyUp(e) {

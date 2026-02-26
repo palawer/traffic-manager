@@ -2,7 +2,7 @@
 
 ## Pendiente de esta sesión
 - ~~Cuando hagas click en un coche que se vea la ruta que hará~~ ✓
-- play/pause
+- ~~play/pause~~ ✓
 
 ---
 

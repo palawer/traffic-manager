@@ -451,6 +451,7 @@ export function updateSpawnButtonLabel() {
 }
 
 export function setupUi() {
+  const pauseBtn      = document.getElementById("pauseBtn");
   const spawnCarBtn   = document.getElementById("spawnCarBtn");
   const debugLanesBtn = document.getElementById("debugLanesBtn");
   const clearCarsBtn  = document.getElementById("clearCarsBtn");
@@ -462,6 +463,12 @@ export function setupUi() {
     if (!btn) return;
     const tool = btn.dataset.tool;
     setTool(tool);
+  });
+
+  pauseBtn.addEventListener("click", () => {
+    state.paused = !state.paused;
+    pauseBtn.textContent = state.paused ? "▶ Reanudar" : "⏸ Pausa";
+    pauseBtn.classList.toggle("active", state.paused);
   });
 
   spawnCarBtn.addEventListener("click", () => {
