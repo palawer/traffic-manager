@@ -16,6 +16,7 @@ let nodeGraphics = null;
 let previewGraphics = null;
 let carsGraphics = null;
 let carLabelsContainer = null;
+let speedLabelsContainer = null;
 
 export async function initRenderer() {
   const worldEl = document.getElementById("world");
@@ -40,6 +41,7 @@ export async function initRenderer() {
   previewGraphics    = new PIXI.Graphics();
   carsGraphics       = new PIXI.Graphics();
   carLabelsContainer = new PIXI.Container();
+  speedLabelsContainer = new PIXI.Container();
 
   camera.addChild(gridGraphics);
   camera.addChild(junctionGraphics);
@@ -51,6 +53,7 @@ export async function initRenderer() {
   camera.addChild(previewGraphics);
   camera.addChild(carsGraphics);
   camera.addChild(carLabelsContainer);
+  camera.addChild(speedLabelsContainer);
   app.stage.addChild(camera);
 
   return { app };
@@ -209,6 +212,18 @@ export function drawRoads() {
 
     roadsGraphics.moveTo(pA.x, pA.y).lineTo(pB.x, pB.y);
     roadsGraphics.stroke({ width: totalWidth, color: COLORS.road, cap: "butt" });
+  }
+
+  // Speed-tool hover highlight
+  if (state.tool === "speed" && state.hoveredSegId !== null) {
+    const hSeg = state.segments.get(state.hoveredSegId);
+    if (hSeg) {
+      const hip = segmentInsetPoints(hSeg);
+      if (hip) {
+        roadsGraphics.moveTo(hip.pA.x, hip.pA.y).lineTo(hip.pB.x, hip.pB.y);
+        roadsGraphics.stroke({ width: hip.totalWidth + 6, color: 0xffffff, alpha: 0.25, cap: "butt" });
+      }
+    }
   }
 
   // Draw lane markings
@@ -441,7 +456,7 @@ export function drawCars() {
 export function updateStatus() {
   updateSpawnButtonLabel();
   const statusEl = document.getElementById("status");
-  const toolName = { segment: "Carretera", select: "Seleccionar" }[state.tool] || state.tool;
+  const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad" }[state.tool] || state.tool;
   statusEl.textContent = `Herramienta: ${toolName} · Nodos: ${state.nodes.size} · Segmentos: ${state.segments.size} · Coches: ${state.cars.length}`;
 }
 
@@ -508,9 +523,51 @@ export function setupUi() {
   setTool("segment");
 }
 
+const SPEED_COLORS = { 30: 0x3399ff, 50: 0x33cc66, 80: 0xffaa00, 120: 0xff4444 };
+
+export function drawSpeedLabels() {
+  const segIds = new Set(state.segments.keys());
+
+  // Remove labels for deleted segments
+  for (let i = speedLabelsContainer.children.length - 1; i >= 0; i--) {
+    if (!segIds.has(speedLabelsContainer.children[i]._segId)) {
+      speedLabelsContainer.removeChildAt(i);
+    }
+  }
+
+  for (const seg of state.segments.values()) {
+    const nodeA = state.nodes.get(seg.nodeA);
+    const nodeB = state.nodes.get(seg.nodeB);
+    if (!nodeA || !nodeB) continue;
+
+    const mx = (nodeA.x + nodeB.x) / 2;
+    const my = (nodeA.y + nodeB.y) / 2;
+
+    // Find or create label
+    let label = null;
+    for (const child of speedLabelsContainer.children) {
+      if (child._segId === seg.id) { label = child; break; }
+    }
+    if (!label) {
+      label = new PIXI.Text({ text: "", style: { fontSize: 11, fill: 0xffffff, fontWeight: "bold" } });
+      label._segId = seg.id;
+      label.anchor.set(0.5, 0.5);
+      speedLabelsContainer.addChild(label);
+    }
+
+    label.text = String(seg.speedLimit);
+    label.style.fill = SPEED_COLORS[seg.speedLimit] ?? 0xffffff;
+    label.x = mx;
+    label.y = my;
+    label.scale.set(1 / state.view.zoom);
+    label.alpha = (state.tool === "speed") ? 1.0 : 0.55;
+  }
+}
+
 export function setTool(tool) {
   state.tool = tool;
   state.drawingSegment = null;
+  state.hoveredSegId = null;
   if (canvas) canvas.style.cursor = tool === "select" ? "default" : "crosshair";
 
   const toolbar = document.getElementById("toolbar");

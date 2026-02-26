@@ -46,6 +46,7 @@ export const state = {
   tool: "segment",           // "select" | "segment"
   drawingSegment: null,      // { fromNodeId } while dragging
   hoveredNodeId: null,
+  hoveredSegId: null,
   selectedNodeId: null,
   selectedSegId: null,
   panning: false,

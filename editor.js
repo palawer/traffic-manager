@@ -162,6 +162,20 @@ function onPointerDown(e) {
 
   if (e.button !== 0) return;
 
+  // Speed limit tool
+  if (state.tool === "speed") {
+    const hit = hitTest(world.x, world.y);
+    if (hit && hit.type === "segment") {
+      const seg = state.segments.get(hit.id);
+      if (seg) {
+        const cycle = [30, 50, 80, 120];
+        const idx = cycle.indexOf(seg.speedLimit);
+        seg.speedLimit = cycle[(idx + 1) % cycle.length];
+      }
+    }
+    return;
+  }
+
   // Car selection: always check first so you can click a car in any mode
   const clickedCarId = findCarAt(world.x, world.y);
   if (clickedCarId !== null) {
@@ -256,6 +270,14 @@ function onPointerMove(e) {
   // Update hover node
   state.hoveredNodeId = snapToNode(world.x, world.y);
 
+  // Update hover segment (for speed tool)
+  if (state.tool === "speed") {
+    const hit = hitTest(world.x, world.y);
+    state.hoveredSegId = (hit && hit.type === "segment") ? hit.id : null;
+  } else {
+    state.hoveredSegId = null;
+  }
+
   if (dragNodeId !== null) {
     const node = state.nodes.get(dragNodeId);
     if (node) {
@@ -329,6 +351,7 @@ function onKeyDown(e) {
   // Tool shortcuts
   if (e.key === "r" || e.key === "R") setTool("segment");
   if (e.key === "s" || e.key === "S") setTool("select");
+  if (e.key === "v" || e.key === "V") setTool("speed");
   if (e.key === "p" || e.key === "P") document.getElementById("pauseBtn")?.click();
 }
 

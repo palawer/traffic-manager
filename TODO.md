@@ -24,9 +24,9 @@ La infraestructura de datos ya está lista. Solo falta construir la UI.
 - La estructura ya existe: `TrafficSignal { phases: [{ duration, greenConnectors }], currentPhase, phaseTimer }`
 - `isConnectorGreen()` ya consulta las señales; sin señal configurada todo está en verde
 
-### Límite de velocidad
-- Brocha para cambiar el `speedLimit` por segmento desde la UI
-- El campo ya existe en cada segmento y el A* lo usa como coste de arista
+### ~~Límite de velocidad~~ ✓
+- ~~Brocha para cambiar el `speedLimit` por segmento desde la UI~~
+- ~~El campo ya existe en cada segmento y el A* lo usa como coste de arista~~
 
 ---
 
