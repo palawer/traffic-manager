@@ -20,17 +20,13 @@ export function hslToHex(h, s, l) {
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const hp = h / 60;
   const x = c * (1 - Math.abs((hp % 2) - 1));
-  let r1 = 0;
-  let g1 = 0;
-  let b1 = 0;
-
+  let r1 = 0, g1 = 0, b1 = 0;
   if (hp >= 0 && hp < 1) [r1, g1, b1] = [c, x, 0];
   else if (hp < 2) [r1, g1, b1] = [x, c, 0];
   else if (hp < 3) [r1, g1, b1] = [0, c, x];
   else if (hp < 4) [r1, g1, b1] = [0, x, c];
   else if (hp < 5) [r1, g1, b1] = [x, 0, c];
   else [r1, g1, b1] = [c, 0, x];
-
   const m = l - c / 2;
   const r = Math.round((r1 + m) * 255);
   const g = Math.round((g1 + m) * 255);
@@ -57,7 +53,6 @@ export function pointAtPath(path, s) {
   if (path.points.length === 0) return { x: 0, y: 0 };
   if (s <= 0) return path.points[0];
   if (s >= path.length) return path.points[path.points.length - 1];
-
   let i = 1;
   while (i < path.cumulative.length && path.cumulative[i] < s) i++;
   const p0 = path.points[i - 1];
@@ -76,10 +71,7 @@ export function headingAtPath(path, s) {
 
 export function bezierPoint(p0, p1, p2, p3, t) {
   const u = 1 - t;
-  const uu = u * u;
-  const tt = t * t;
-  const uuu = uu * u;
-  const ttt = tt * t;
+  const uu = u * u, tt = t * t, uuu = uu * u, ttt = tt * t;
   return {
     x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
     y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y,
@@ -97,94 +89,129 @@ export function leftNormalForHeading(heading) {
 export function lineIntersection(p0, d0, p1, d1) {
   const det = d0.x * d1.y - d0.y * d1.x;
   if (Math.abs(det) < 1e-6) return null;
-  const dx = p1.x - p0.x;
-  const dy = p1.y - p0.y;
+  const dx = p1.x - p0.x, dy = p1.y - p0.y;
   const t = (dx * d1.y - dy * d1.x) / det;
   return { x: p0.x + d0.x * t, y: p0.y + d0.y * t };
 }
 
-export function buildArcWorld(center, radius, startAngle, endAngle, turnSign) {
-  let delta = normalizeAngle(endAngle - startAngle);
-  if (turnSign > 0 && delta < 0) delta += Math.PI * 2;
-  if (turnSign < 0 && delta > 0) delta -= Math.PI * 2;
-  const steps = Math.max(3, Math.ceil(Math.abs(delta) / 0.12));
-  const pts = [];
-  for (let i = 0; i <= steps; i++) {
-    const a = startAngle + (delta * i) / steps;
-    pts.push({ x: center.x + Math.cos(a) * radius, y: center.y + Math.sin(a) * radius });
-  }
-  return pts;
-}
-
-export function buildArcWorldByDelta(center, radius, startAngle, delta) {
-  const steps = Math.max(3, Math.ceil(Math.abs(delta) / 0.12));
-  const pts = [];
-  for (let i = 0; i <= steps; i++) {
-    const a = startAngle + (delta * i) / steps;
-    pts.push({ x: center.x + Math.cos(a) * radius, y: center.y + Math.sin(a) * radius });
-  }
-  return pts;
-}
-
 export function buildBezierPolyline(p0, h0, p1, h1, handleLength, steps = 10) {
-  const c1 = {
-    x: p0.x + Math.cos(h0) * handleLength,
-    y: p0.y + Math.sin(h0) * handleLength,
-  };
-  const c2 = {
-    x: p1.x - Math.cos(h1) * handleLength,
-    y: p1.y - Math.sin(h1) * handleLength,
-  };
+  const c1 = { x: p0.x + Math.cos(h0) * handleLength, y: p0.y + Math.sin(h0) * handleLength };
+  const c2 = { x: p1.x - Math.cos(h1) * handleLength, y: p1.y - Math.sin(h1) * handleLength };
   const pts = [];
   for (let i = 0; i <= steps; i++) pts.push(bezierPoint(p0, c1, c2, p1, i / steps));
   return pts;
 }
 
-export function buildArc(radius, startAngle, endAngle, direction = -1) {
-  const pts = [{ x: Math.cos(startAngle) * radius, y: Math.sin(startAngle) * radius }];
-  const full = Math.PI * 2;
-  let travel;
-  if (direction < 0) {
-    travel = startAngle - endAngle;
-    while (travel < 0) travel += full;
-  } else {
-    travel = endAngle - startAngle;
-    while (travel < 0) travel += full;
-  }
+// --- New functions for node+segment model ---
 
-  const stepAngle = 0.12;
-  const steps = Math.max(1, Math.ceil(travel / stepAngle));
-  for (let i = 1; i < steps; i++) {
-    const t = i / steps;
-    const a = direction < 0 ? startAngle - travel * t : startAngle + travel * t;
-    pts.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius });
+/**
+ * Returns the inset distance from a node for a given segment,
+ * based on the widest road at that node.
+ */
+export function junctionInset(seg, allSegsAtNode) {
+  const myHalf = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH / 2;
+  let maxHalf = myHalf;
+  for (const other of allSegsAtNode) {
+    if (other.id === seg.id) continue;
+    const half = (other.lanesAtoB + other.lanesBtoA) * LANE_WIDTH / 2;
+    if (half > maxHalf) maxHalf = half;
   }
-  const endA = direction < 0 ? startAngle - travel : startAngle + travel;
-  pts.push({ x: Math.cos(endA) * radius, y: Math.sin(endA) * radius });
+  // If only one segment at node (dead-end), no inset needed
+  if (allSegsAtNode.length <= 1) return 0;
+  return maxHalf + 4;
+}
+
+/**
+ * Returns { x, y, heading } of lane i endpoint at the node end of the segment.
+ * heading = direction of travel (arriving at node from the segment side).
+ * dir: "AtoB" means cars travel from nodeA to nodeB on this lane group.
+ * Lane 0 = closest to curb (rightmost of travel direction), higher = closer to center.
+ */
+export function laneEndpointWorld(seg, nodes, allSegsAtNode, nodeId, laneIdx, dir) {
+  const otherNodeId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
+  const node = nodes.get(nodeId);
+  const other = nodes.get(otherNodeId);
+  if (!node || !other) return null;
+
+  // heading INTO the junction (from other toward node)
+  const headingIn = Math.atan2(node.y - other.y, node.x - other.x);
+
+  const inset = junctionInset(seg, allSegsAtNode);
+  // stop-line position along road
+  const sx = node.x - Math.cos(headingIn) * inset;
+  const sy = node.y - Math.sin(headingIn) * inset;
+
+  // right normal of headingIn
+  const nx = -Math.sin(headingIn);
+  const ny = Math.cos(headingIn);
+
+  // For AtoB: lanes are on right side of the road (positive right normal offset from center)
+  // For BtoA: lanes are on left side (negative right normal = toward left)
+  // Lane 0 = outermost (curb side), Lane N-1 = center-adjacent
+  // Center divider is at offset 0 from centerline
+  // AtoB lanes occupy [0, lanesAtoB * LANE_WIDTH] on the right
+  // BtoA lanes occupy [0, lanesBtoA * LANE_WIDTH] on the left
+  // So for AtoB: lateral = +(laneIdx + 0.5) * LANE_WIDTH from center
+  //    for BtoA: lateral = -(laneIdx + 0.5) * LANE_WIDTH from center
+
+  const sign = (dir === "AtoB") ? 1 : -1;
+  // But we need to account for which end of the segment we're at.
+  // If we're at nodeB end, AtoB traffic is ARRIVING (so headingIn already points toward nodeB)
+  // If we're at nodeA end, BtoA traffic is ARRIVING
+  // The lateral offset is: right of the travel direction
+  // Travel direction for AtoB traffic arriving at nodeB: headingIn (from A toward B)
+  // Travel direction for BtoA traffic arriving at nodeA: headingIn reversed = opposite of A→B
+
+  // Actually: headingIn = direction from other toward nodeId
+  // For AtoB arriving at nodeB: headingIn = A→B direction. Right offset = positive nx,ny above
+  // For AtoB leaving nodeA: that's BtoA arriving at nodeA from B side — handled by dir param
+
+  // Correct formula: lateralOff = sign * (laneIdx + 0.5) * LANE_WIDTH
+  // where sign depends on which side of the road this direction occupies
+  // Right-hand traffic: AtoB is on right side of AtoB direction
+  // At nodeB end: AtoB arrives from left→right, its lanes are to the right of the road axis
+  // At nodeA end: the road axis from nodeA perspective is reversed
+
+  // Let's define: road axis direction = from nodeA to nodeB
+  const axisAngle = Math.atan2(other.y - node.y, other.x - node.x); // from node toward other
+  // Actually axis = from nodeA to nodeB:
+  const nodeAx = nodes.get(seg.nodeA).x, nodeAy = nodes.get(seg.nodeA).y;
+  const nodeBx = nodes.get(seg.nodeB).x, nodeBy = nodes.get(seg.nodeB).y;
+  const axisHeading = Math.atan2(nodeBy - nodeAy, nodeBx - nodeAx);
+
+  // Right normal of axis (AtoB direction)
+  const axisRightX = -Math.sin(axisHeading);
+  const axisRightY = Math.cos(axisHeading);
+
+  // AtoB lanes: offset = +(laneIdx + 0.5) * LANE_WIDTH in axisRight direction
+  // BtoA lanes: offset = -(laneIdx + 0.5) * LANE_WIDTH in axisRight direction (i.e. left side)
+  const lateralSign = (dir === "AtoB") ? 1 : -1;
+  const lateralOff = lateralSign * (laneIdx + 0.5) * LANE_WIDTH;
+
+  return {
+    x: sx + axisRightX * lateralOff,
+    y: sy + axisRightY * lateralOff,
+    heading: headingIn,  // direction of travel arriving at this node
+  };
+}
+
+/**
+ * Build a cubic bezier polyline connecting two lane endpoints through a junction.
+ * fromEp/toEp: { x, y, heading } — heading = direction of travel (incoming at junction)
+ * The bezier departs fromEp in the heading direction, arrives at toEp in the toEp heading direction.
+ */
+export function buildConnectorBezier(fromEp, toEp) {
+  const dist = Math.hypot(toEp.x - fromEp.x, toEp.y - fromEp.y);
+  const h = Math.max(dist * 0.4, 10);
+  const c1 = {
+    x: fromEp.x + Math.cos(fromEp.heading) * h,
+    y: fromEp.y + Math.sin(fromEp.heading) * h,
+  };
+  const c2 = {
+    x: toEp.x - Math.cos(toEp.heading) * h,
+    y: toEp.y - Math.sin(toEp.heading) * h,
+  };
+  const pts = [];
+  for (let i = 0; i <= 12; i++) pts.push(bezierPoint(fromEp, c1, c2, toEp, i / 12));
   return pts;
-}
-
-export function intersectRayWithCircle(origin, dir, center, radius) {
-  const ox = origin.x - center.x;
-  const oy = origin.y - center.y;
-  const b = 2 * (ox * dir.x + oy * dir.y);
-  const c = ox * ox + oy * oy - radius * radius;
-  const disc = b * b - 4 * c;
-  if (disc < 0) return null;
-  const sqrtDisc = Math.sqrt(disc);
-  const t1 = (-b - sqrtDisc) / 2;
-  const t2 = (-b + sqrtDisc) / 2;
-  let t = Infinity;
-  if (t1 >= 0) t = Math.min(t, t1);
-  if (t2 >= 0) t = Math.min(t, t2);
-  if (!Number.isFinite(t)) return null;
-  return { x: origin.x + dir.x * t, y: origin.y + dir.y * t };
-}
-
-export function getRoundaboutLaneRadii(def) {
-  const outer = def.radius + 12;
-  const inner = outer - LANE_WIDTH;
-  const divider = (inner + outer) * 0.5;
-  const outerEdge = outer + LANE_WIDTH * 0.5;
-  return { inner, outer, divider, outerEdge };
 }

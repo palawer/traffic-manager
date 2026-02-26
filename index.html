@@ -3,60 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rotonda Lab</title>
+    <title>Traffic Manager Lab</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <aside class="panel">
-      <h1>Rotonda Lab</h1>
-      <p class="hint">Construye la red y pulsa play.</p>
+      <h1>Traffic Manager</h1>
+      <p class="hint">Dibuja nodos y carreteras, luego spawna coches.</p>
 
       <section>
-        <h2>Piezas</h2>
-        <div class="palette" id="palette">
-          <button class="tool-btn active" data-tool="select" title="Seleccionar">
+        <h2>Herramientas</h2>
+        <div id="toolbar" class="palette">
+          <button class="tool-btn" data-tool="select" title="Seleccionar (S)">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M5 4 L17 12 L11 13 L13 20 L10 21 L8 14 L5 16 Z"></path>
             </svg>
           </button>
-          <button class="tool-btn" data-piece="straight" title="Recta">
+          <button class="tool-btn" data-tool="segment" title="Carretera (R)">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 12 H21"></path>
-              <path d="M3 9 H21"></path>
-              <path d="M3 15 H21"></path>
-            </svg>
-          </button>
-          <button class="tool-btn" data-piece="curve" title="Curva 90º">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 18 A14 14 0 0 1 18 4"></path>
-              <path d="M4 15 A11 11 0 0 1 15 4"></path>
-              <path d="M4 21 A17 17 0 0 1 21 4"></path>
-            </svg>
-          </button>
-          <button class="tool-btn" data-piece="traffic_light_cross" title="Cruce semaforizado">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 12 H21"></path>
-              <path d="M12 3 V21"></path>
-              <circle cx="18.5" cy="7.5" r="1.3"></circle>
-              <circle cx="5.5" cy="16.5" r="1.3"></circle>
-            </svg>
-          </button>
-          <button class="tool-btn" data-piece="roundabout_s" title="Rotonda S">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="4.5"></circle>
-              <circle cx="12" cy="12" r="8.5"></circle>
-            </svg>
-          </button>
-          <button class="tool-btn" data-piece="roundabout_m" title="Rotonda M">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="3.5"></circle>
-              <circle cx="12" cy="12" r="9.5"></circle>
-            </svg>
-          </button>
-          <button class="tool-btn" data-piece="roundabout_l" title="Rotonda L">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="2.5"></circle>
-              <circle cx="12" cy="12" r="10.5"></circle>
+              <path d="M3 12 H21" stroke-width="3" fill="none"/>
+              <path d="M3 9 H21" stroke-width="1" fill="none"/>
+              <path d="M3 15 H21" stroke-width="1" fill="none"/>
             </svg>
           </button>
         </div>
@@ -65,8 +32,8 @@
       <section>
         <h2>Simulación</h2>
         <div class="controls">
-          <button id="spawnCarBtn">Spawn coche</button>
-          <button id="debugLanesBtn" class="active">Debug carriles: ON</button>
+          <button id="spawnCarBtn">Spawn coches</button>
+          <button id="debugLanesBtn" class="active">Debug: ON</button>
           <button id="clearCarsBtn">Quitar coches</button>
           <button id="clearAllBtn">Borrar todo</button>
         </div>
@@ -75,13 +42,13 @@
       <section>
         <h2>Controles</h2>
         <ul>
-          <li>Seleccionar: elegir/mover piezas</li>
-          <li>Recta/Curva/Cruce/Rotonda: modo colocación</li>
-          <li>Click en canvas: colocar pieza activa</li>
-          <li>R: rotar seleccionada</li>
-          <li>Supr: borrar seleccionada</li>
-          <li>Spawn coche: añade 1 coche</li>
-          <li>Debug carriles: muestra trayectorias reales</li>
+          <li><strong>R</strong>: Herramienta carretera</li>
+          <li><strong>S</strong>: Seleccionar/mover</li>
+          <li>Click en vacío: crear nodo y empezar carretera</li>
+          <li>Click en nodo existente: conectar desde él</li>
+          <li>2º click: finalizar carretera</li>
+          <li><strong>Supr</strong>: borrar seleccionado</li>
+          <li><strong>Esc</strong>: cancelar</li>
           <li>Rueda: zoom</li>
           <li>Espacio + arrastre: mover cámara</li>
         </ul>

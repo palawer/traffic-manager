@@ -1,231 +1,335 @@
-import { state, TRAFFIC_LIGHT_GREEN_TIME } from "./state.js";
-import { PIECES } from "./pieces.js";
-import { normalizeAngle, polylineMetrics, pointAtPath, headingAtPath, getRoundaboutLaneRadii, hslToHex } from "./geometry.js";
-import { pieceById, parseConnectorKey, rebuildNetwork } from "./network.js";
-import {
-  assignTraversal,
-  assignTraversalWithBlend,
-  assignTurnaroundTraversal,
-  assignRoundaboutTurnaroundTraversal,
-} from "./traversal.js";
+import { state, JOIN_GRACE_TIME } from "./state.js";
+import { pointAtPath, headingAtPath, hslToHex } from "./geometry.js";
+import { rebuildJunctions, getNodeSegments, findConnector, getDestinationNode } from "./network.js";
+import { findRoute, routeToLaneSequence } from "./router.js";
+import { buildLanePath } from "./traversal.js";
 
-export function getTrafficLightPhase(piece) {
-  const cycle = TRAFFIC_LIGHT_GREEN_TIME * 2;
-  const t = (state.signalTime + piece.id * 0.7) % cycle;
-  return t < TRAFFIC_LIGHT_GREEN_TIME ? "ns" : "ew";
+/**
+ * Check if a junction connector's signal is green.
+ * For now (Phase 1) all signals are green.
+ */
+export function isConnectorGreen(connector) {
+  if (!connector) return true;
+  const signal = state.signals.get(connector.nodeId);
+  if (!signal) return true;
+  const phase = signal.phases[signal.currentPhase];
+  if (!phase) return true;
+  return phase.greenConnectors.has(connector.id);
 }
 
-export function isNorthSouthConnector(piece, connectorIdx) {
-  const def = PIECES[piece.type];
-  const c = def.connectors[connectorIdx];
-  const worldDir = normalizeAngle(c.dir + piece.rot);
-  return Math.abs(Math.cos(worldDir)) < 0.5;
-}
-
-export function isTrafficLightGreen(piece, connectorIdx) {
-  const phase = getTrafficLightPhase(piece);
-  const isNs = isNorthSouthConnector(piece, connectorIdx);
-  return (phase === "ns" && isNs) || (phase === "ew" && !isNs);
-}
-
-export function isRoundaboutEntryBlocked(roundPiece, entryIdx) {
-  const def = PIECES[roundPiece.type];
-  const radii = getRoundaboutLaneRadii(def);
-  const entryConn = def.connectors[entryIdx];
-  const entryAngle = normalizeAngle(Math.atan2(entryConn.y, entryConn.x) + roundPiece.rot);
-
-  const mergeOuter = {
-    x: roundPiece.x + Math.cos(entryAngle) * radii.outer,
-    y: roundPiece.y + Math.sin(entryAngle) * radii.outer,
-  };
-  const mergeInner = {
-    x: roundPiece.x + Math.cos(entryAngle) * radii.inner,
-    y: roundPiece.y + Math.sin(entryAngle) * radii.inner,
-  };
-
-  for (const car of state.cars) {
-    if (car.pieceId !== roundPiece.id) continue;
-    const p = pointAtPath(car.path, car.s);
-    if (Math.hypot(p.x - mergeOuter.x, p.y - mergeOuter.y) < 38) return true;
-    if (Math.hypot(p.x - mergeInner.x, p.y - mergeInner.y) < 34) return true;
-  }
-  return false;
-}
-
-export function spawnCar() {
-  if (state.networkDirty) rebuildNetwork();
-  const openCandidates = state.openConnectors.filter((c) => {
-    const piece = pieceById(c.pieceId);
-    return piece && !PIECES[piece.type].isRoundabout;
-  });
-  const fallbackCandidates =
-    openCandidates.length > 0
-      ? openCandidates
-      : state.connectors.filter((c) => {
-          const piece = pieceById(c.pieceId);
-          return piece && !PIECES[piece.type].isRoundabout;
-        });
-  if (fallbackCandidates.length === 0) return false;
-
-  const entry = fallbackCandidates[Math.floor(Math.random() * fallbackCandidates.length)];
-  const car = {
-    id: Math.random().toString(36).slice(2, 9),
-    pieceId: entry.pieceId,
-    fromConnectorIdx: entry.connectorIndex,
-    toConnectorIdx: 0,
-    path: polylineMetrics([]),
-    s: 0,
-    speed: 0,
-    desiredSpeed: 56 + Math.random() * 18,
-    joinGrace: 0,
-    waiting: false,
-    exitOrdinal: null,
-    color: hslToHex(Math.random() * 360, 0.7, 0.52),
-  };
-
-  if (assignTraversal(car, entry.pieceId, entry.connectorIndex)) {
-    const head = pointAtPath(car.path, 0);
-    const blocked = state.cars.some((c) => {
-      const p = pointAtPath(c.path, c.s);
-      return Math.hypot(p.x - head.x, p.y - head.y) < 35;
-    });
-    if (!blocked) {
-      state.cars.push(car);
-      return true;
+/**
+ * Update signal timers.
+ */
+export function updateSignals(dt) {
+  state.signalTime += dt;
+  for (const signal of state.signals.values()) {
+    signal.phaseTimer -= dt;
+    if (signal.phaseTimer <= 0) {
+      signal.currentPhase = (signal.currentPhase + 1) % signal.phases.length;
+      signal.phaseTimer = signal.phases[signal.currentPhase].duration;
     }
   }
-  return false;
+}
+
+/**
+ * Spawn a car at a random segment endpoint with an A* route to another random node.
+ */
+export function spawnCar() {
+  if (state.networkDirty) rebuildJunctions();
+
+  const nodeIds = [...state.nodes.keys()];
+  if (nodeIds.length < 2) return false;
+
+  // Pick a random starting node that has outgoing segments
+  const shuffled = nodeIds.sort(() => Math.random() - 0.5);
+  let fromNodeId = null, toNodeId = null;
+
+  for (const nid of shuffled) {
+    const segs = getNodeSegments(nid);
+    if (segs.length === 0) continue;
+    // Pick a random destination
+    const candidates = nodeIds.filter(id => id !== nid);
+    if (candidates.length === 0) continue;
+    const dest = candidates[Math.floor(Math.random() * candidates.length)];
+    const route = findRoute(nid, dest);
+    if (route && route.length >= 2) {
+      fromNodeId = nid;
+      toNodeId = dest;
+      break;
+    }
+  }
+
+  if (fromNodeId === null) return false;
+
+  const route = findRoute(fromNodeId, toNodeId);
+  if (!route || route.length < 2) return false;
+
+  const laneSeq = routeToLaneSequence(route);
+  if (laneSeq.length === 0) return false;
+
+  const firstStep = laneSeq[0];
+  const seg = state.segments.get(firstStep.segId);
+  if (!seg) return false;
+
+  const lanePath = buildLanePath(seg, state.nodes, firstStep.dir, firstStep.laneIdx);
+  if (lanePath.length < 1) return false;
+
+  // Check spawn point is clear
+  const head = pointAtPath(lanePath, 0);
+  for (const other of state.cars) {
+    const op = pointAtPath(other.path, other.s);
+    if (Math.hypot(op.x - head.x, op.y - head.y) < 35) return false;
+  }
+
+  const car = {
+    id: Math.random().toString(36).slice(2, 9),
+    color: hslToHex(Math.random() * 360, 0.7, 0.52),
+    // route
+    route,
+    routeStep: 0,        // which segment in laneSeq we're on
+    laneSeq,
+    // current position
+    phase: "segment",    // "segment" | "junction"
+    segId: firstStep.segId,
+    dir: firstStep.dir,
+    laneIdx: firstStep.laneIdx,
+    s: 0,
+    path: lanePath,
+    // junction phase
+    connectorId: null,
+    junctionS: 0,
+    junctionPath: null,
+    // motion
+    speed: 0,
+    desiredSpeed: 56 + Math.random() * 24,
+    joinGrace: 0,
+    waiting: false,
+  };
+
+  state.cars.push(car);
+  return true;
 }
 
 export function updateCars(dt) {
-  if (state.networkDirty) rebuildNetwork();
-  state.signalTime += dt;
+  if (state.networkDirty) rebuildJunctions();
+  updateSignals(dt);
 
   for (const car of state.cars) {
     car.joinGrace = Math.max(0, (car.joinGrace || 0) - dt);
-    let obstacleDist = Infinity;
-    const myPos = pointAtPath(car.path, car.s);
-    const myHeading = headingAtPath(car.path, car.s);
-    const remToEnd = car.path.length - car.s;
 
-    for (const other of state.cars) {
-      if (other === car) continue;
-      if (other.pieceId !== car.pieceId) continue;          // sólo misma pieza
-      if (other.path.length - other.s < 2 && other.speed > 2) continue; // a punto de transicionar (no si está parado esperando)
-      const op = pointAtPath(other.path, other.s);
-      const dist = Math.hypot(op.x - myPos.x, op.y - myPos.y);
-      if (dist > 60) continue;
-      const otherHeading = headingAtPath(other.path, other.s);
-      if (Math.abs(normalizeAngle(otherHeading - myHeading)) > Math.PI / 2) continue; // ignora coches en sentido contrario
-      const toOther = Math.atan2(op.y - myPos.y, op.x - myPos.x);
-      const rel = Math.abs(normalizeAngle(toOther - myHeading));
-
-      if (car.joinGrace > 0 || (other.joinGrace || 0) > 0) {
-        if (!(dist < 10 && rel < 1.2)) continue;
-      } else if (rel >= 0.75) {
-        continue;
-      }
-
-      if (dist < obstacleDist) obstacleDist = dist;
-    }
-
-    let target = car.desiredSpeed;
-    if (car.joinGrace > 0) target = Math.max(target, 28);
-    if (remToEnd < 30) {
-      const currentKey = `${car.pieceId}:${car.toConnectorIdx}`;
-      const nextKey = state.connections.get(currentKey);
-      if (nextKey) {
-        const next = parseConnectorKey(nextKey);
-        const nextPiece = pieceById(next.pieceId);
-        if (nextPiece && PIECES[nextPiece.type].isTrafficLightCross && !isTrafficLightGreen(nextPiece, next.connectorIndex)) {
-          target = 0;
-        }
-        if (nextPiece && PIECES[nextPiece.type].isRoundabout && isRoundaboutEntryBlocked(nextPiece, next.connectorIndex)) {
-          target = 0;
-        }
-      }
-    }
-    if (obstacleDist < 24) target = 0;
-    else if (obstacleDist < 40) target *= 0.35;
-
-    const accel = target > car.speed ? 60 : 95;
-    const delta = target - car.speed;
-    const step = Math.sign(delta) * Math.min(Math.abs(delta), accel * dt);
-    car.speed += step;
-
-    let advance = car.speed * dt;
-    while (advance > 0) {
-      const rem = car.path.length - car.s;
-      if (advance < rem) {
-        car.s += advance;
-        advance = 0;
-      } else {
-        car.s = car.path.length;
-        advance -= rem;
-
-        const currentKey = `${car.pieceId}:${car.toConnectorIdx}`;
-        const nextKey = state.connections.get(currentKey);
-        if (!nextKey) {
-          const currentPiece = pieceById(car.pieceId);
-          if (currentPiece) {
-            if (PIECES[currentPiece.type].isRoundabout) {
-              if (!assignRoundaboutTurnaroundTraversal(car, currentPiece, car.toConnectorIdx)) {
-                car.remove = true;
-                break;
-              }
-              continue;
-            }
-            if (!assignTurnaroundTraversal(car, currentPiece, car.toConnectorIdx)) {
-              car.remove = true;
-              break;
-            }
-            continue;
-          }
-          car.remove = true;
-          break;
-        }
-
-        const next = parseConnectorKey(nextKey);
-        const nextPiece = pieceById(next.pieceId);
-        if (!nextPiece) {
-          car.remove = true;
-          break;
-        }
-
-        if (PIECES[nextPiece.type].isTrafficLightCross && !isTrafficLightGreen(nextPiece, next.connectorIndex)) {
-          car.s = Math.max(0, car.path.length - 1);
-          car.speed = 0;
-          break;
-        }
-
-        if (PIECES[nextPiece.type].isRoundabout && isRoundaboutEntryBlocked(nextPiece, next.connectorIndex)) {
-          car.s = Math.max(0, car.path.length - 1);
-          car.speed = 0;
-          break;
-        }
-
-        if (!assignTraversalWithBlend(car, nextPiece, next.connectorIndex)) {
-          car.remove = true;
-          break;
-        }
-      }
-    }
-  }
-
-  state.cars = state.cars.filter((c) => !c.remove);
-
-  if (state.pendingSpawns > 0) {
-    if (state.networkDirty) rebuildNetwork();
-    if (state.connectors.length === 0) {
-      state.pendingSpawns = 0;
+    if (car.phase === "segment") {
+      updateCarOnSegment(car, dt);
     } else {
-      const maxAttemptsPerFrame = 6;
-      let attempts = 0;
-      while (state.pendingSpawns > 0 && attempts < maxAttemptsPerFrame) {
-        if (!spawnCar()) break;
-        state.pendingSpawns -= 1;
-        attempts += 1;
+      updateCarOnJunction(car, dt);
+    }
+  }
+
+  state.cars = state.cars.filter(c => !c.remove);
+
+  // Spawn pending cars
+  if (state.pendingSpawns > 0) {
+    const maxAttempts = 6;
+    for (let i = 0; i < maxAttempts && state.pendingSpawns > 0; i++) {
+      if (spawnCar()) state.pendingSpawns--;
+    }
+    // If no nodes/segments exist, clear queue
+    if (state.nodes.size < 2) state.pendingSpawns = 0;
+  }
+}
+
+function updateCarOnSegment(car, dt) {
+  const remToEnd = car.path.length - car.s;
+
+  // Collision detection with cars on same segment/lane
+  let obstacleDist = Infinity;
+  for (const other of state.cars) {
+    if (other === car) continue;
+    if (other.phase !== "segment") continue;
+    if (other.segId !== car.segId || other.dir !== car.dir || other.laneIdx !== car.laneIdx) continue;
+    if (other.s <= car.s) continue; // only cars ahead
+
+    const dist = other.s - car.s;
+    if (dist < obstacleDist) obstacleDist = dist;
+  }
+
+  const seg = state.segments.get(car.segId);
+  let target = car.desiredSpeed;
+
+  // Determine the desired next step (for connector routing)
+  const nextStep = (car.laneSeq && car.routeStep + 1 < car.laneSeq.length)
+    ? car.laneSeq[car.routeStep + 1] : null;
+
+  // Look ahead to junction
+  if (remToEnd < 50 && seg) {
+    const destNodeId = getDestinationNode(seg, car.dir);
+    const junc = state.junctions.get(destNodeId);
+
+    if (junc && junc.connectors.length > 0) {
+      const conn = nextStep
+        ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
+        : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
+      if (conn) {
+        if (!isConnectorGreen(conn)) target = 0;
+        if (isJunctionBlocked(conn)) target = 0;
+      } else {
+        if (remToEnd < 5) target = 0;
       }
     }
   }
+
+  if (obstacleDist < 24) target = 0;
+  else if (obstacleDist < 40) target *= 0.4;
+
+  applyAcceleration(car, target, dt);
+
+  car.s += car.speed * dt;
+
+  if (car.s >= car.path.length) {
+    car.s = car.path.length;
+    if (!seg) { car.remove = true; return; }
+
+    const destNodeId = getDestinationNode(seg, car.dir);
+    const conn = nextStep
+      ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
+      : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
+
+    if (conn && isConnectorGreen(conn) && !isJunctionBlocked(conn)) {
+      car.phase = "junction";
+      car.connectorId = conn.id;
+      car.junctionPath = conn.path;
+      car.junctionS = 0;
+      car.joinGrace = JOIN_GRACE_TIME;
+    } else if (conn) {
+      // Wait at stop line
+      car.s = car.path.length - 1;
+      car.speed = 0;
+    } else {
+      // Dead end or last step — remove car
+      car.remove = true;
+    }
+  }
+}
+
+function updateCarOnJunction(car, dt) {
+  if (!car.junctionPath) {
+    car.remove = true;
+    return;
+  }
+
+  // Find connector
+  let conn = null;
+  const nodeId = getConnectorNodeId(car.connectorId);
+  if (nodeId !== null) {
+    const junc = state.junctions.get(nodeId);
+    if (junc) {
+      conn = junc.connectors.find(c => c.id === car.connectorId) || null;
+    }
+  }
+
+  // Collision avoidance on junction (simple: check other cars on same connector)
+  let obstacleDist = Infinity;
+  for (const other of state.cars) {
+    if (other === car) continue;
+    if (other.phase !== "junction") continue;
+    if (other.connectorId !== car.connectorId) continue;
+    if (other.junctionS <= car.junctionS) continue;
+    const dist = other.junctionS - car.junctionS;
+    if (dist < obstacleDist) obstacleDist = dist;
+  }
+
+  let target = car.desiredSpeed;
+  if (obstacleDist < 24) target = 0;
+  else if (obstacleDist < 40) target *= 0.4;
+
+  applyAcceleration(car, target, dt);
+  car.junctionS += car.speed * dt;
+
+  if (car.junctionS >= car.junctionPath.length) {
+    // Exited junction — move to next segment
+    if (conn) {
+      const outSeg = state.segments.get(conn.outSegId);
+      if (outSeg) {
+        const lanePath = buildLanePath(outSeg, state.nodes, conn.outDir, conn.outLane);
+        if (lanePath.length > 0) {
+          car.phase = "segment";
+          car.segId = conn.outSegId;
+          car.dir = conn.outDir;
+          car.laneIdx = conn.outLane;
+          car.path = lanePath;
+          car.s = 0;
+          car.junctionPath = null;
+          car.connectorId = null;
+          car.joinGrace = JOIN_GRACE_TIME;
+          // Advance route step if this matches our plan
+          advanceRouteStepIfMatches(car, conn.outSegId, conn.outDir, conn.outLane);
+          return;
+        }
+      }
+    }
+    car.remove = true;
+  }
+}
+
+/**
+ * Try to find the nodeId for a connector by searching all junctions.
+ */
+function getConnectorNodeId(connectorId) {
+  for (const [nodeId, junc] of state.junctions) {
+    for (const conn of junc.connectors) {
+      if (conn.id === connectorId) return nodeId;
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if a junction connector is already in use by another car.
+ */
+function isJunctionBlocked(conn) {
+  for (const car of state.cars) {
+    if (car.phase !== "junction") continue;
+    if (car.connectorId === conn.id) return true;
+  }
+  return false;
+}
+
+/**
+ * When a car has reached the end of its route step, advance to the next.
+ * If no more steps, remove the car.
+ */
+function advanceRouteStep(car) {
+  car.routeStep++;
+  if (!car.laneSeq || car.routeStep >= car.laneSeq.length) {
+    car.remove = true;
+    return;
+  }
+  const step = car.laneSeq[car.routeStep];
+  const seg = state.segments.get(step.segId);
+  if (!seg) { car.remove = true; return; }
+  const lanePath = buildLanePath(seg, state.nodes, step.dir, step.laneIdx);
+  if (lanePath.length < 1) { car.remove = true; return; }
+  car.phase = "segment";
+  car.segId = step.segId;
+  car.dir = step.dir;
+  car.laneIdx = step.laneIdx;
+  car.path = lanePath;
+  car.s = 0;
+}
+
+function advanceRouteStepIfMatches(car, segId, dir, laneIdx) {
+  if (!car.laneSeq) return;
+  const nextStep = car.routeStep + 1;
+  if (nextStep < car.laneSeq.length) {
+    const step = car.laneSeq[nextStep];
+    if (step.segId === segId && step.dir === dir && step.laneIdx === laneIdx) {
+      car.routeStep = nextStep;
+    }
+  }
+}
+
+function applyAcceleration(car, target, dt) {
+  const accel = target > car.speed ? 60 : 100;
+  const delta = target - car.speed;
+  const step = Math.sign(delta) * Math.min(Math.abs(delta), accel * dt);
+  car.speed = Math.max(0, car.speed + step);
 }

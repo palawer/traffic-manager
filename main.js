@@ -1,30 +1,27 @@
 import {
   initRenderer,
   setupUi,
-  setPaletteSelection,
   applyCameraTransform,
   drawGrid,
-  drawRoadsAndConnectors,
-  drawDebugLanes,
+  drawRoads,
+  drawPreview,
   drawCars,
   updateStatus,
 } from "./renderer.js";
 import { setupInput } from "./editor.js";
 import { updateCars } from "./simulation.js";
 
-init().catch((err) => {
+init().catch(err => {
   console.error(err);
   document.getElementById("status").textContent = "Error inicializando PixiJS";
 });
 
 async function init() {
   const { app } = await initRenderer();
-
   setupUi();
   setupInput();
-  setPaletteSelection(null);
 
-  app.ticker.add((ticker) => {
+  app.ticker.add(ticker => {
     const dt = Math.min(ticker.deltaMS / 1000, 0.05);
     frame(dt);
   });
@@ -33,10 +30,9 @@ async function init() {
 function frame(dt) {
   updateCars(dt);
   updateStatus();
-
   applyCameraTransform();
   drawGrid();
-  drawRoadsAndConnectors();
-  drawDebugLanes();
+  drawRoads();
+  drawPreview();
   drawCars();
 }

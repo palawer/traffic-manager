@@ -90,6 +90,11 @@ button {
   stroke-linejoin: round;
 }
 
+.tool-btn svg circle.filled {
+  fill: #eaf3f6;
+  stroke: none;
+}
+
 button:hover {
   background: #2f5260;
 }

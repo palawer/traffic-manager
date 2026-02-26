@@ -1,80 +1,109 @@
-import { state, LANE_OFFSET, CONNECT_SNAP_DIST, CONNECT_ANGLE_TOL } from "./state.js";
-import { PIECES } from "./pieces.js";
-import { rotatePoint, normalizeAngle, rightNormalForHeading } from "./geometry.js";
+import { state } from "./state.js";
+import { buildJunction } from "./junction.js";
 
-export function pieceById(id) {
-  return state.pieces.find((p) => p.id === id) || null;
+export function addNode(x, y) {
+  const id = state.nextNodeId++;
+  state.nodes.set(id, { id, x, y });
+  state.networkDirty = true;
+  return id;
 }
 
-export function transformLocalPoint(piece, pt) {
-  const p = rotatePoint(pt.x, pt.y, piece.rot);
-  return { x: piece.x + p.x, y: piece.y + p.y };
-}
-
-export function getWorldConnectors(piece) {
-  const def = PIECES[piece.type];
-  return def.connectors.map((c, index) => {
-    const rp = rotatePoint(c.x, c.y, piece.rot);
-    return {
-      key: `${piece.id}:${index}`,
-      pieceId: piece.id,
-      connectorIndex: index,
-      x: piece.x + rp.x,
-      y: piece.y + rp.y,
-      dir: normalizeAngle(c.dir + piece.rot),
-    };
-  });
-}
-
-export function connectorLanePointWorld(piece, connectorIdx, heading, offset = LANE_OFFSET) {
-  const def = PIECES[piece.type];
-  const c = def.connectors[connectorIdx];
-  const base = transformLocalPoint(piece, c);
-  const n = rightNormalForHeading(heading);
-  return { x: base.x + n.x * offset, y: base.y + n.y * offset };
-}
-
-export function parseConnectorKey(key) {
-  const [pieceId, connectorIndex] = key.split(":");
-  return { pieceId: Number(pieceId), connectorIndex: Number(connectorIndex) };
-}
-
-export function rebuildNetwork() {
-  const connectors = [];
-  for (const piece of state.pieces) connectors.push(...getWorldConnectors(piece));
-
-  const candidates = [];
-  for (let i = 0; i < connectors.length; i++) {
-    for (let j = i + 1; j < connectors.length; j++) {
-      const a = connectors[i];
-      const b = connectors[j];
-      if (a.pieceId === b.pieceId) continue;
-      const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      if (dist > CONNECT_SNAP_DIST) continue;
-      const facing = Math.abs(normalizeAngle(a.dir - b.dir + Math.PI));
-      if (facing > CONNECT_ANGLE_TOL) continue;
-      candidates.push({ a, b, dist });
+export function removeNode(nodeId) {
+  state.nodes.delete(nodeId);
+  state.junctions.delete(nodeId);
+  // Remove all segments connected to this node
+  for (const [segId, seg] of state.segments) {
+    if (seg.nodeA === nodeId || seg.nodeB === nodeId) {
+      state.segments.delete(segId);
+      const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
+      state.junctions.delete(otherId);
     }
   }
+  state.networkDirty = true;
+}
 
-  candidates.sort((c1, c2) => c1.dist - c2.dist);
-
-  const used = new Set();
-  const connections = new Map();
-  for (const c of candidates) {
-    if (used.has(c.a.key) || used.has(c.b.key)) continue;
-    used.add(c.a.key);
-    used.add(c.b.key);
-    connections.set(c.a.key, c.b.key);
-    connections.set(c.b.key, c.a.key);
+export function addSegment(nodeAId, nodeBId, lanesAtoB = 1, lanesBtoA = 1, speedLimit = 80) {
+  // Prevent duplicate segment between same two nodes
+  for (const seg of state.segments.values()) {
+    if ((seg.nodeA === nodeAId && seg.nodeB === nodeBId) ||
+        (seg.nodeA === nodeBId && seg.nodeB === nodeAId)) {
+      return seg.id;
+    }
   }
+  const id = state.nextSegmentId++;
+  state.segments.set(id, { id, nodeA: nodeAId, nodeB: nodeBId, lanesAtoB, lanesBtoA, speedLimit });
+  state.networkDirty = true;
+  return id;
+}
 
-  state.connectors = connectors;
-  state.connections = connections;
-  state.openConnectors = connectors.filter((c) => !connections.has(c.key));
+export function removeSegment(segId) {
+  const seg = state.segments.get(segId);
+  if (!seg) return;
+  state.segments.delete(segId);
+  state.junctions.delete(seg.nodeA);
+  state.junctions.delete(seg.nodeB);
+  state.networkDirty = true;
+}
+
+/** Returns all segments connected to a node */
+export function getNodeSegments(nodeId) {
+  const result = [];
+  for (const seg of state.segments.values()) {
+    if (seg.nodeA === nodeId || seg.nodeB === nodeId) result.push(seg);
+  }
+  return result;
+}
+
+/** Rebuild junction polygons and lane connectors for all nodes */
+export function rebuildJunctions() {
+  state.junctions.clear();
+  // Reset connector IDs to keep them stable per rebuild
+  // We use a shared counter across all junctions in this rebuild
+  const connectorIdRef = { value: 1 };
+
+  for (const nodeId of state.nodes.keys()) {
+    const segs = getNodeSegments(nodeId);
+    if (segs.length === 0) continue;
+    const junction = buildJunction(nodeId, state.nodes, segs, connectorIdRef);
+    state.junctions.set(nodeId, junction);
+  }
+  state.nextConnectorId = connectorIdRef.value;
   state.networkDirty = false;
 }
 
 export function markNetworkDirty() {
   state.networkDirty = true;
+}
+
+/**
+ * Given a car arriving at nodeId from inSegId/inDir/inLane,
+ * find the connector that leads to outSegId/outDir/outLane (if provided),
+ * or else return the first matching connector.
+ */
+export function findConnector(nodeId, inSegId, inDir, inLane, outSegId, outDir, outLane) {
+  const junc = state.junctions.get(nodeId);
+  if (!junc) return null;
+  let fallback = null;
+  for (const conn of junc.connectors) {
+    if (conn.inSegId !== inSegId || conn.inDir !== inDir || conn.inLane !== inLane) continue;
+    if (outSegId === undefined) return conn; // first match
+    if (conn.outSegId === outSegId && conn.outDir === outDir && conn.outLane === outLane) return conn;
+    if (!fallback) fallback = conn; // keep first as fallback
+  }
+  return fallback; // best effort if exact match not found
+}
+
+/**
+ * Find the node at the end of a segment (given seg + dir of travel).
+ * AtoB → nodeB; BtoA → nodeA
+ */
+export function getDestinationNode(seg, dir) {
+  return dir === "AtoB" ? seg.nodeB : seg.nodeA;
+}
+
+/**
+ * Find the node at the start of a segment (given seg + dir of travel).
+ */
+export function getSourceNode(seg, dir) {
+  return dir === "AtoB" ? seg.nodeA : seg.nodeB;
 }
