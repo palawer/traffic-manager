@@ -12,6 +12,7 @@ let roadsGraphics = null;
 let laneMarkingsGraphics = null;
 let tmpeOverlayGraphics = null;
 let routeGraphics = null;
+let signalGraphics = null;
 let nodeGraphics = null;
 let previewGraphics = null;
 let carsGraphics = null;
@@ -37,6 +38,7 @@ export async function initRenderer() {
   laneMarkingsGraphics = new PIXI.Graphics();
   tmpeOverlayGraphics  = new PIXI.Graphics();
   routeGraphics        = new PIXI.Graphics();
+  signalGraphics       = new PIXI.Graphics();
   nodeGraphics       = new PIXI.Graphics();
   previewGraphics    = new PIXI.Graphics();
   carsGraphics       = new PIXI.Graphics();
@@ -50,6 +52,7 @@ export async function initRenderer() {
   camera.addChild(speedLabelsContainer);
   camera.addChild(tmpeOverlayGraphics);
   camera.addChild(routeGraphics);
+  camera.addChild(signalGraphics);
   camera.addChild(nodeGraphics);
   camera.addChild(previewGraphics);
   camera.addChild(carsGraphics);
@@ -455,7 +458,7 @@ export function updatePropertiesPanel() {
 export function updateStatus() {
   updateSpawnButtonLabel();
   const statusEl = document.getElementById("status");
-  const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad", arrow: "Flechas" }[state.tool] || state.tool;
+  const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad", arrow: "Flechas", signal: "Semáforos" }[state.tool] || state.tool;
   statusEl.textContent = `Herramienta: ${toolName} · Nodos: ${state.nodes.size} · Segmentos: ${state.segments.size} · Coches: ${state.cars.length}`;
 }
 
@@ -610,6 +613,41 @@ export function drawLaneArrows() {
     const my = (nodeA.y + nodeB.y) / 2 + rightY * lateralOff;
 
     drawArrowGlyphs(tmpeOverlayGraphics, mx, my, laneHeading, arrowSet);
+  }
+}
+
+export function drawSignals() {
+  signalGraphics.clear();
+
+  for (const [nodeId, signal] of state.signals) {
+    const junc = state.junctions.get(nodeId);
+    if (!junc) continue;
+    const phase = signal.phases[signal.currentPhase];
+    const drawnLanes = new Set();
+
+    for (const conn of junc.connectors) {
+      const laneKey = `${conn.inSegId}:${conn.inDir}:${conn.inLane}`;
+      if (drawnLanes.has(laneKey)) continue;
+      drawnLanes.add(laneKey);
+      if (conn.path.points.length === 0) continue;
+
+      const pt = conn.path.points[0];
+      const isGreen = phase?.greenConnectors.has(conn.id) ?? true;
+      const color = isGreen ? COLORS.trafficGreen : COLORS.trafficRed;
+      const r = 5;
+
+      signalGraphics.circle(pt.x, pt.y, r).fill(color);
+      signalGraphics.circle(pt.x, pt.y, r).stroke({ width: 1.5, color: 0x000000, alpha: 0.5 });
+    }
+
+    // In signal tool mode: ring around nodes that have a signal
+    if (state.tool === "signal") {
+      const node = state.nodes.get(nodeId);
+      if (node) {
+        const r = 14 / state.view.zoom;
+        signalGraphics.circle(node.x, node.y, r).stroke({ width: 2 / state.view.zoom, color: 0xffdd00, alpha: 0.85 });
+      }
+    }
   }
 }
 

@@ -18,10 +18,9 @@ La infraestructura de datos ya está lista. Solo falta construir la UI.
 - Herramienta para redibujar manualmente qué carril de entrada conecta con qué carril de salida en un nodo
 - Los conectores ya se generan automáticamente en `junction.js`; aquí se sobreescriben con `userDefined: true`
 
-### Semáforos programables
-- Herramienta para configurar fases y duraciones por nodo
-- La estructura ya existe: `TrafficSignal { phases: [{ duration, greenConnectors }], currentPhase, phaseTimer }`
-- `isConnectorGreen()` ya consulta las señales; sin señal configurada todo está en verde
+### ~~Semáforos programables~~ ✓ (versión básica)
+- ~~Herramienta para configurar fases y duraciones por nodo~~
+- Click en nodo → activa semáforo 2 fases (15s cada una), otro click lo quita
 
 ### ~~Límite de velocidad~~ ✓
 - ~~Brocha para cambiar el `speedLimit` por segmento desde la UI~~

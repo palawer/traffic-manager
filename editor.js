@@ -1,6 +1,6 @@
 import { state, NODE_SNAP_DIST, GRID, LANE_WIDTH } from "./state.js";
 import { snap, pointAtPath } from "./geometry.js";
-import { addNode, addSegment, removeNode, removeSegment, markNetworkDirty } from "./network.js";
+import { addNode, addSegment, removeNode, removeSegment, markNetworkDirty, rebuildJunctions } from "./network.js";
 import { canvas, screenToWorld, setTool } from "./renderer.js";
 
 /**
@@ -190,6 +190,54 @@ function cycleArrows(segId, dir, laneIdx) {
   else state.laneArrows.set(key, new Set(next));
 }
 
+/**
+ * Create a default 2-phase traffic signal at a node.
+ * Splits incoming segment directions into alternating green phases.
+ */
+function createDefaultSignal(nodeId) {
+  if (state.networkDirty) rebuildJunctions();
+  const junc = state.junctions.get(nodeId);
+  if (!junc || junc.connectors.length === 0) return;
+
+  // Group connectors by incoming lane direction
+  const byInSeg = new Map();
+  for (const conn of junc.connectors) {
+    const key = `${conn.inSegId}:${conn.inDir}`;
+    if (!byInSeg.has(key)) byInSeg.set(key, []);
+    byInSeg.get(key).push(conn);
+  }
+
+  // Sort incoming directions by angle around the node
+  const node = state.nodes.get(nodeId);
+  const inDirs = [...byInSeg.entries()].map(([key, conns]) => {
+    const [segId, dir] = key.split(":");
+    const seg = state.segments.get(parseInt(segId));
+    const otherId = (dir === "AtoB") ? seg?.nodeA : seg?.nodeB;
+    const other = otherId != null ? state.nodes.get(otherId) : null;
+    const angle = other ? Math.atan2(other.y - node.y, other.x - node.x) : 0;
+    return { conns, angle };
+  });
+  inDirs.sort((a, b) => a.angle - b.angle);
+
+  // Alternating split: even indices → phase 0, odd → phase 1
+  const phase0 = new Set(), phase1 = new Set();
+  inDirs.forEach(({ conns }, i) => {
+    const target = i % 2 === 0 ? phase0 : phase1;
+    for (const conn of conns) target.add(conn.id);
+  });
+
+  const dur = 15;
+  state.signals.set(nodeId, {
+    nodeId,
+    phases: [
+      { duration: dur, greenConnectors: phase0 },
+      { duration: dur, greenConnectors: phase1 },
+    ],
+    currentPhase: 0,
+    phaseTimer: dur,
+  });
+}
+
 export function setupInput() {
   canvas.addEventListener("contextmenu", e => e.preventDefault());
 
@@ -217,6 +265,16 @@ function onPointerDown(e) {
   }
 
   if (e.button !== 0) return;
+
+  // Signal tool
+  if (state.tool === "signal") {
+    const nodeId = snapToNode(world.x, world.y);
+    if (nodeId !== null) {
+      if (state.signals.has(nodeId)) state.signals.delete(nodeId);
+      else createDefaultSignal(nodeId);
+    }
+    return;
+  }
 
   // Arrow tool
   if (state.tool === "arrow") {
@@ -421,6 +479,7 @@ function onKeyDown(e) {
   if (e.key === "s" || e.key === "S") setTool("select");
   if (e.key === "v" || e.key === "V") setTool("speed");
   if (e.key === "a" || e.key === "A") setTool("arrow");
+  if (e.key === "t" || e.key === "T") setTool("signal");
   if (e.key === "p" || e.key === "P") document.getElementById("pauseBtn")?.click();
 }
 
