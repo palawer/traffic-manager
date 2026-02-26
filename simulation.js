@@ -100,8 +100,9 @@ export function spawnCar() {
     junctionS: 0,
     junctionPath: null,
     // motion
+    speedFactor: 0.85 + Math.random() * 0.2,   // per-car personality (0.85–1.05)
     speed: 0,
-    desiredSpeed: 56 + Math.random() * 24,
+    desiredSpeed: seg.speedLimit * (0.85 + Math.random() * 0.2),
     joinGrace: 0,
     waiting: false,
   };
@@ -153,7 +154,7 @@ function updateCarOnSegment(car, dt) {
   }
 
   const seg = state.segments.get(car.segId);
-  let target = car.desiredSpeed;
+  let target = seg ? seg.speedLimit * car.speedFactor : car.desiredSpeed;
 
   // Determine the desired next step (for connector routing)
   const nextStep = (car.laneSeq && car.routeStep + 1 < car.laneSeq.length)
@@ -260,6 +261,7 @@ function updateCarOnJunction(car, dt) {
           car.junctionPath = null;
           car.connectorId = null;
           car.joinGrace = JOIN_GRACE_TIME;
+          car.desiredSpeed = outSeg.speedLimit * car.speedFactor;
           // Advance route step if this matches our plan
           advanceRouteStepIfMatches(car, conn.outSegId, conn.outDir, conn.outLane);
           return;
