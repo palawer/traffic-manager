@@ -82,7 +82,11 @@ button {
 }
 
 .tool-btn svg path,
-.tool-btn svg circle {
+.tool-btn svg circle,
+.tool-btn svg line,
+.tool-btn svg polyline,
+.tool-btn svg polygon,
+.tool-btn svg rect {
   fill: none;
   stroke: #eaf3f6;
   stroke-width: 1.8;
@@ -90,7 +94,7 @@ button {
   stroke-linejoin: round;
 }
 
-.tool-btn svg circle.filled {
+.tool-btn svg .filled {
   fill: #eaf3f6;
   stroke: none;
 }
