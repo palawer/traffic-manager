@@ -455,7 +455,7 @@ export function updatePropertiesPanel() {
 export function updateStatus() {
   updateSpawnButtonLabel();
   const statusEl = document.getElementById("status");
-  const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad" }[state.tool] || state.tool;
+  const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad", arrow: "Flechas" }[state.tool] || state.tool;
   statusEl.textContent = `Herramienta: ${toolName} · Nodos: ${state.nodes.size} · Segmentos: ${state.segments.size} · Coches: ${state.cars.length}`;
 }
 
@@ -538,6 +538,81 @@ export function setupUi() {
   setTool("segment");
 }
 
+function drawArrowGlyphs(g, cx, cy, laneHeading, arrowSet) {
+  const types = [...arrowSet];
+  const count = types.length;
+  const perpX = -Math.sin(laneHeading), perpY = Math.cos(laneHeading);
+
+  types.forEach((type, i) => {
+    const offset = (i - (count - 1) / 2) * 7;
+    const ox = cx + perpX * offset;
+    const oy = cy + perpY * offset;
+
+    let ah = laneHeading;
+    if (type === "right") ah = laneHeading + Math.PI / 2.2;
+    if (type === "left")  ah = laneHeading - Math.PI / 2.2;
+
+    const cos = Math.cos(ah), sin = Math.sin(ah);
+    const px = -Math.sin(ah), py = Math.cos(ah);
+    const h = 8, w = 4.5;
+
+    const tip = { x: ox + cos * h,                    y: oy + sin * h };
+    const bl  = { x: ox - cos * h * 0.25 - px * w,   y: oy - sin * h * 0.25 - py * w };
+    const br  = { x: ox - cos * h * 0.25 + px * w,   y: oy - sin * h * 0.25 + py * w };
+
+    g.poly([tip.x, tip.y, bl.x, bl.y, br.x, br.y]);
+    g.fill({ color: 0xffffff, alpha: 0.9 });
+  });
+}
+
+export function drawLaneArrows() {
+  tmpeOverlayGraphics.clear();
+
+  // Hover highlight
+  if (state.tool === "arrow" && state.hoveredLane) {
+    const { segId, dir, laneIdx } = state.hoveredLane;
+    const seg = state.segments.get(segId);
+    if (seg) {
+      const ip = segmentInsetPoints(seg);
+      if (ip) {
+        const { pA, pB, ux, uy } = ip;
+        const nx = -uy, ny = ux;
+        const lateralSign = (dir === "AtoB") ? 1 : -1;
+        const center = lateralSign * (laneIdx + 0.5) * LANE_WIDTH;
+        tmpeOverlayGraphics.moveTo(pA.x + nx * center, pA.y + ny * center)
+          .lineTo(pB.x + nx * center, pB.y + ny * center);
+        tmpeOverlayGraphics.stroke({ width: LANE_WIDTH - 2, color: 0xffffff, alpha: 0.18 });
+      }
+    }
+  }
+
+  // Draw arrow glyphs for each configured lane
+  for (const [key, arrowSet] of state.laneArrows) {
+    if (arrowSet.size === 0) continue;
+    const parts = key.split(":");
+    const segId = parseInt(parts[0]);
+    const dir = parts[1];
+    const laneIdx = parseInt(parts[2]);
+    const seg = state.segments.get(segId);
+    if (!seg) continue;
+
+    const nodeA = state.nodes.get(seg.nodeA);
+    const nodeB = state.nodes.get(seg.nodeB);
+    if (!nodeA || !nodeB) continue;
+
+    const heading = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x);
+    const rightX = -Math.sin(heading), rightY = Math.cos(heading);
+    const lateralSign = (dir === "AtoB") ? 1 : -1;
+    const laneHeading = (dir === "AtoB") ? heading : heading + Math.PI;
+    const lateralOff = lateralSign * (laneIdx + 0.5) * LANE_WIDTH;
+
+    const mx = (nodeA.x + nodeB.x) / 2 + rightX * lateralOff;
+    const my = (nodeA.y + nodeB.y) / 2 + rightY * lateralOff;
+
+    drawArrowGlyphs(tmpeOverlayGraphics, mx, my, laneHeading, arrowSet);
+  }
+}
+
 export function drawSpeedLabels() {
   const segIds = new Set(state.segments.keys());
 
@@ -602,6 +677,7 @@ export function setTool(tool) {
   state.tool = tool;
   state.drawingSegment = null;
   state.hoveredSegId = null;
+  state.hoveredLane = null;
   if (canvas) canvas.style.cursor = tool === "select" ? "default" : "crosshair";
 
   const toolbar = document.getElementById("toolbar");

@@ -10,10 +10,9 @@
 
 La infraestructura de datos ya está lista. Solo falta construir la UI.
 
-### Flechas de carril
-- Herramienta para pintar qué direcciones permite cada carril (izquierda / recto / derecha)
-- Los datos ya existen: `state.laneArrows` (`Map<"segId:dir:laneIdx" → Set<"left"|"straight"|"right">>`)
-- El router ya las consulta en `routeToLaneSequence`
+### ~~Flechas de carril~~ ✓
+- ~~Herramienta para pintar qué direcciones permite cada carril (izquierda / recto / derecha)~~
+- ~~Los datos ya existen: `state.laneArrows`; el router ya las consulta en `routeToLaneSequence`~~
 
 ### Editor de conectores de carril
 - Herramienta para redibujar manualmente qué carril de entrada conecta con qué carril de salida en un nodo

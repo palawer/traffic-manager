@@ -8,6 +8,7 @@ import {
   drawPreview,
   drawCars,
   drawSelectedCarRoute,
+  drawLaneArrows,
   drawSpeedLabels,
   updateStatus,
   updatePropertiesPanel,
@@ -40,6 +41,7 @@ function frame(dt) {
   drawRoads();
   drawPreview();
   drawSelectedCarRoute();
+  drawLaneArrows();
   drawSpeedLabels();
   drawCars();
 }

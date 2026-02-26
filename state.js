@@ -47,6 +47,7 @@ export const state = {
   drawingSegment: null,      // { fromNodeId } while dragging
   hoveredNodeId: null,
   hoveredSegId: null,
+  hoveredLane: null,
   selectedNodeId: null,
   selectedSegId: null,
   panning: false,
