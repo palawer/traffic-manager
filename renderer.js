@@ -489,11 +489,7 @@ export function setupUi() {
   }));
   const clearCarsBtn  = document.getElementById("clearCarsBtn");
   const clearAllBtn   = document.getElementById("clearAllBtn");
-  document.getElementById("toolbar").addEventListener("click", e => {
-    const btn = e.target.closest("button[data-tool]");
-    if (btn) setTool(btn.dataset.tool);
-  });
-  document.getElementById("toolbar-utils").addEventListener("click", e => {
+  document.querySelector(".panel").addEventListener("click", e => {
     const btn = e.target.closest("button[data-tool]");
     if (btn) setTool(btn.dataset.tool);
   });
