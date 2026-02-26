@@ -523,8 +523,6 @@ export function setupUi() {
   setTool("segment");
 }
 
-const SPEED_COLORS = { 30: 0x3399ff, 50: 0x33cc66, 80: 0xffaa00, 120: 0xff4444 };
-
 export function drawSpeedLabels() {
   const segIds = new Set(state.segments.keys());
 
@@ -543,24 +541,45 @@ export function drawSpeedLabels() {
     const mx = (nodeA.x + nodeB.x) / 2;
     const my = (nodeA.y + nodeB.y) / 2;
 
-    // Find or create label
-    let label = null;
+    // Find or create sign container
+    let sign = null;
     for (const child of speedLabelsContainer.children) {
-      if (child._segId === seg.id) { label = child; break; }
+      if (child._segId === seg.id) { sign = child; break; }
     }
-    if (!label) {
-      label = new PIXI.Text({ text: "", style: { fontSize: 11, fill: 0xffffff, fontWeight: "bold" } });
-      label._segId = seg.id;
-      label.anchor.set(0.5, 0.5);
-      speedLabelsContainer.addChild(label);
+    if (!sign) {
+      sign = new PIXI.Container();
+      sign._segId = seg.id;
+      sign._lastSpeed = null;
+
+      const bg = new PIXI.Graphics();
+      bg.label = "bg";
+      sign.addChild(bg);
+
+      const txt = new PIXI.Text({ text: "", style: { fontSize: 13, fill: 0x111111, fontWeight: "bold" } });
+      txt.label = "lbl";
+      txt.anchor.set(0.5, 0.5);
+      sign.addChild(txt);
+
+      speedLabelsContainer.addChild(sign);
     }
 
-    label.text = String(seg.speedLimit);
-    label.style.fill = SPEED_COLORS[seg.speedLimit] ?? 0xffffff;
-    label.x = mx;
-    label.y = my;
-    label.scale.set(1 / state.view.zoom);
-    label.alpha = (state.tool === "speed") ? 1.0 : 0.55;
+    // Redraw background only when speed changes
+    if (sign._lastSpeed !== seg.speedLimit) {
+      sign._lastSpeed = seg.speedLimit;
+
+      const bg = sign.getChildByLabel("bg");
+      const R = 13;
+      bg.clear();
+      bg.circle(0, 0, R).fill(0xffffff);
+      bg.circle(0, 0, R).stroke({ width: 2.5, color: 0xcc0000 });
+
+      sign.getChildByLabel("lbl").text = String(seg.speedLimit);
+    }
+
+    sign.x = mx;
+    sign.y = my;
+    sign.scale.set(1 / state.view.zoom);
+    sign.alpha = (state.tool === "speed") ? 1.0 : 0.8;
   }
 }
 
