@@ -255,6 +255,7 @@ export function setupInput() {
 let dragNodeId = null;
 let dragOffset = { x: 0, y: 0 };
 
+
 function toggleUserConnector(nodeId, inKey, outKey) {
   if (!state.userConnectors.has(nodeId)) state.userConnectors.set(nodeId, new Map());
   const nodeMap = state.userConnectors.get(nodeId);
@@ -481,13 +482,16 @@ function onPointerMove(e) {
   }
 
   if (dragNodeId !== null) {
-    const node = state.nodes.get(dragNodeId);
-    if (node) {
-      node.x = snap(world.x - dragOffset.x);
-      node.y = snap(world.y - dragOffset.y);
-      markNetworkDirty();
+    if (state.tool !== "select") { dragNodeId = null; }
+    else {
+      const node = state.nodes.get(dragNodeId);
+      if (node) {
+        node.x = snap(world.x - dragOffset.x);
+        node.y = snap(world.y - dragOffset.y);
+        markNetworkDirty();
+      }
+      return;
     }
-    return;
   }
 
   if (state.drawingSegment) {

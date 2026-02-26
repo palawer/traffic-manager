@@ -7,6 +7,7 @@ export function saveState() {
     const data = {
       nextNodeId: state.nextNodeId,
       nextSegmentId: state.nextSegmentId,
+      nextConnectorId: state.nextConnectorId,
       nodes: [...state.nodes.entries()],
       segments: [...state.segments.entries()],
       laneArrows: [...state.laneArrows.entries()].map(([k, v]) => [k, [...v]]),
@@ -37,6 +38,7 @@ export function loadState() {
     const data = JSON.parse(raw);
     state.nextNodeId = data.nextNodeId ?? 1;
     state.nextSegmentId = data.nextSegmentId ?? 1;
+    state.nextConnectorId = data.nextConnectorId ?? 1;
     state.nodes = new Map(data.nodes);
     state.segments = new Map(data.segments);
     state.laneArrows = new Map(

@@ -44,6 +44,7 @@ export function spawnCar() {
   const shuffled = nodeIds.sort(() => Math.random() - 0.5);
   let fromNodeId = null, toNodeId = null;
 
+  let foundRoute = null;
   for (const nid of shuffled) {
     const segs = getNodeSegments(nid);
     if (segs.length === 0) continue;
@@ -55,13 +56,14 @@ export function spawnCar() {
     if (route && route.length >= 2) {
       fromNodeId = nid;
       toNodeId = dest;
+      foundRoute = route;
       break;
     }
   }
 
   if (fromNodeId === null) return false;
 
-  const route = findRoute(fromNodeId, toNodeId);
+  const route = foundRoute;
   if (!route || route.length < 2) return false;
 
   const laneSeq = routeToLaneSequence(route);
@@ -197,6 +199,7 @@ function updateCarOnSegment(car, dt) {
     if (conn && isConnectorGreen(conn) && !isJunctionBlocked(conn)) {
       car.phase = "junction";
       car.connectorId = conn.id;
+      car.junctionNodeId = conn.nodeId;
       car.junctionPath = conn.path;
       car.junctionS = 0;
       car.joinGrace = JOIN_GRACE_TIME;
@@ -217,15 +220,10 @@ function updateCarOnJunction(car, dt) {
     return;
   }
 
-  // Find connector
+  // Find connector using cached nodeId (O(1) junction lookup)
   let conn = null;
-  const nodeId = getConnectorNodeId(car.connectorId);
-  if (nodeId !== null) {
-    const junc = state.junctions.get(nodeId);
-    if (junc) {
-      conn = junc.connectors.find(c => c.id === car.connectorId) || null;
-    }
-  }
+  const junc = state.junctions.get(car.junctionNodeId);
+  if (junc) conn = junc.connectors.find(c => c.id === car.connectorId) || null;
 
   // Collision avoidance on junction (simple: check other cars on same connector)
   let obstacleDist = Infinity;
@@ -273,24 +271,16 @@ function updateCarOnJunction(car, dt) {
 }
 
 /**
- * Try to find the nodeId for a connector by searching all junctions.
- */
-function getConnectorNodeId(connectorId) {
-  for (const [nodeId, junc] of state.junctions) {
-    for (const conn of junc.connectors) {
-      if (conn.id === connectorId) return nodeId;
-    }
-  }
-  return null;
-}
-
-/**
- * Check if a junction connector is already in use by another car.
+ * Check if a junction connector is blocked for entry.
+ * Allows following with spacing: blocks only if another car is still near the entry.
  */
 function isJunctionBlocked(conn) {
   for (const car of state.cars) {
     if (car.phase !== "junction") continue;
-    if (car.connectorId === conn.id) return true;
+    if (car.connectorId !== conn.id) continue;
+    // Allow entry if the car ahead is already well into the connector
+    if (car.junctionPath && car.junctionS > 30) continue;
+    return true;
   }
   return false;
 }
