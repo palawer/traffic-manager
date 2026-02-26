@@ -2,6 +2,23 @@ import { state } from "./state.js";
 import { buildJunction } from "./junction.js";
 import { saveState } from "./persistence.js";
 
+/** Remove userConnector entries that reference a deleted segment */
+function pruneUserConnectorsForSeg(segId) {
+  for (const [nodeId, nodeMap] of state.userConnectors) {
+    for (const [inKey, outSet] of nodeMap) {
+      if (parseInt(inKey.split(":")[0]) === segId) {
+        nodeMap.delete(inKey);
+        continue;
+      }
+      for (const outKey of outSet) {
+        if (parseInt(outKey.split(":")[0]) === segId) outSet.delete(outKey);
+      }
+      if (outSet.size === 0) nodeMap.delete(inKey);
+    }
+    if (nodeMap.size === 0) state.userConnectors.delete(nodeId);
+  }
+}
+
 export function addNode(x, y) {
   const id = state.nextNodeId++;
   state.nodes.set(id, { id, x, y });
@@ -12,10 +29,12 @@ export function addNode(x, y) {
 export function removeNode(nodeId) {
   state.nodes.delete(nodeId);
   state.junctions.delete(nodeId);
+  state.userConnectors.delete(nodeId);
   // Remove all segments connected to this node
   for (const [segId, seg] of state.segments) {
     if (seg.nodeA === nodeId || seg.nodeB === nodeId) {
       state.segments.delete(segId);
+      pruneUserConnectorsForSeg(segId);
       const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
       state.junctions.delete(otherId);
     }
@@ -41,6 +60,7 @@ export function removeSegment(segId) {
   const seg = state.segments.get(segId);
   if (!seg) return;
   state.segments.delete(segId);
+  pruneUserConnectorsForSeg(segId);
   state.junctions.delete(seg.nodeA);
   state.junctions.delete(seg.nodeB);
   state.networkDirty = true;
@@ -65,7 +85,7 @@ export function rebuildJunctions() {
   for (const nodeId of state.nodes.keys()) {
     const segs = getNodeSegments(nodeId);
     if (segs.length === 0) continue;
-    const junction = buildJunction(nodeId, state.nodes, segs, connectorIdRef);
+    const junction = buildJunction(nodeId, state.nodes, segs, connectorIdRef, state.userConnectors.get(nodeId));
     state.junctions.set(nodeId, junction);
   }
   state.nextConnectorId = connectorIdRef.value;

@@ -32,6 +32,16 @@
       <section>
         <h2>Utilidades</h2>
         <div id="toolbar-utils" class="palette">
+          <button class="tool-btn" data-tool="connector" title="Conectores de carril (C)">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="5"  cy="17" r="2.5" class="filled"/>
+              <circle cx="19" cy="7"  r="2.5" class="filled"/>
+              <path d="M5 17 C5 10, 19 14, 19 7" stroke-width="2" fill="none"/>
+              <circle cx="5"  cy="8"  r="2.5" class="filled"/>
+              <circle cx="19" cy="17" r="2.5" class="filled"/>
+              <path d="M5 8 C5 13, 19 12, 19 17" stroke-width="1.2" fill="none"/>
+            </svg>
+          </button>
           <button class="tool-btn" data-tool="signal" title="Semáforos (T)">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="8" y="1.5" width="8" height="21" rx="3" stroke-width="1.6"/>
@@ -99,6 +109,7 @@
           <li>Click en nodo existente: conectar desde él</li>
           <li>2º click: finalizar carretera</li>
           <li><strong>T</strong>: semáforos</li>
+          <li><strong>C</strong>: conectores de carril</li>
           <li><strong>A</strong>: flechas de carril</li>
           <li><strong>V</strong>: límite de velocidad</li>
           <li><strong>P</strong>: pausar / reanudar</li>

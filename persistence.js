@@ -10,6 +10,10 @@ export function saveState() {
       nodes: [...state.nodes.entries()],
       segments: [...state.segments.entries()],
       laneArrows: [...state.laneArrows.entries()].map(([k, v]) => [k, [...v]]),
+      userConnectors: [...state.userConnectors.entries()].map(([nodeId, nodeMap]) => [
+        nodeId,
+        [...nodeMap.entries()].map(([inKey, outSet]) => [inKey, [...outSet]]),
+      ]),
       signals: [...state.signals.entries()].map(([nodeId, sig]) => [nodeId, {
         nodeId: sig.nodeId,
         phases: sig.phases.map(p => ({
@@ -37,6 +41,12 @@ export function loadState() {
     state.segments = new Map(data.segments);
     state.laneArrows = new Map(
       (data.laneArrows ?? []).map(([k, v]) => [k, new Set(v)])
+    );
+    state.userConnectors = new Map(
+      (data.userConnectors ?? []).map(([nodeId, inArr]) => [
+        nodeId,
+        new Map(inArr.map(([inKey, outArr]) => [inKey, new Set(outArr)])),
+      ])
     );
     state.signals = new Map(
       (data.signals ?? []).map(([nodeId, sig]) => [nodeId, {

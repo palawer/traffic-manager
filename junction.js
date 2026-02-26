@@ -14,7 +14,6 @@ function classifyTurn(inHeading, outHeading) {
 
 /**
  * Get the stop-line endpoint at nodeId for a lane ARRIVING at nodeId via seg.
- * heading = direction of travel (arriving at node).
  */
 function getArrivalEndpoint(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
   return laneEndpointWorld(seg, nodes, segsAtNode, nodeId, laneIdx, dir);
@@ -22,7 +21,6 @@ function getArrivalEndpoint(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
 
 /**
  * Get the stop-line endpoint at nodeId for a lane DEPARTING nodeId into seg.
- * heading = direction of travel (departing from node toward the other end).
  */
 function getDepartureEndpoint(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
   const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
@@ -53,11 +51,45 @@ function getDepartureEndpoint(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
 }
 
 /**
+ * Collect all incoming and outgoing lane endpoints for a junction node.
+ * Exported so the connector-tool editor and renderer can use them.
+ */
+export function collectLaneEndpoints(nodeId, nodes, segsAtNode) {
+  const incomingLanes = [];
+  const outgoingLanes = [];
+
+  for (const seg of segsAtNode) {
+    if (seg.nodeB === nodeId) {
+      for (let lane = 0; lane < seg.lanesAtoB; lane++) {
+        const ep = getArrivalEndpoint(seg, nodes, segsAtNode, nodeId, lane, "AtoB");
+        if (ep) incomingLanes.push({ segId: seg.id, dir: "AtoB", laneIdx: lane, ep });
+      }
+    }
+    if (seg.nodeA === nodeId) {
+      for (let lane = 0; lane < seg.lanesBtoA; lane++) {
+        const ep = getArrivalEndpoint(seg, nodes, segsAtNode, nodeId, lane, "BtoA");
+        if (ep) incomingLanes.push({ segId: seg.id, dir: "BtoA", laneIdx: lane, ep });
+      }
+    }
+    if (seg.nodeA === nodeId) {
+      for (let lane = 0; lane < seg.lanesAtoB; lane++) {
+        const ep = getDepartureEndpoint(seg, nodes, segsAtNode, nodeId, lane, "AtoB");
+        if (ep) outgoingLanes.push({ segId: seg.id, dir: "AtoB", laneIdx: lane, ep });
+      }
+    }
+    if (seg.nodeB === nodeId) {
+      for (let lane = 0; lane < seg.lanesBtoA; lane++) {
+        const ep = getDepartureEndpoint(seg, nodes, segsAtNode, nodeId, lane, "BtoA");
+        if (ep) outgoingLanes.push({ segId: seg.id, dir: "BtoA", laneIdx: lane, ep });
+      }
+    }
+  }
+
+  return { incomingLanes, outgoingLanes };
+}
+
+/**
  * Build polygon for the junction area (for rendering).
- * Strategy: collect both stop-line corners for every segment, then sort them
- * by angle around the node centre. This naturally produces the correct convex
- * shape (chamfered square for a 4-way, hexagon for a T-junction, etc.) with
- * no arcs needed.
  */
 function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
   const node = nodes.get(nodeId);
@@ -83,7 +115,6 @@ function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
     corners.push({ x: stopX + perpX * half, y: stopY + perpY * half });
   }
 
-  // Sort corners by angle around the node → convex polygon in winding order
   corners.sort((a, b) =>
     Math.atan2(a.y - node.y, a.x - node.x) -
     Math.atan2(b.y - node.y, b.x - node.x)
@@ -93,70 +124,37 @@ function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
 }
 
 /**
- * Build all default lane connectors for a junction node.
- * connectorIdRef: { value: number } — mutated to assign IDs
+ * Build auto-generated lane connectors for a junction node.
  */
-function buildDefaultConnectors(nodeId, nodes, segsAtNode, connectorIdRef) {
+function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoingLanes, connectorIdRef) {
   const connectors = [];
-  if (segsAtNode.length < 2) return connectors;
+  if (incomingLanes.length === 0 || outgoingLanes.length === 0) return connectors;
 
-  // Collect incoming lanes (arriving at nodeId)
-  const incoming = [];
-  for (const seg of segsAtNode) {
-    if (seg.nodeB === nodeId) {
-      // AtoB traffic arrives at nodeB
-      for (let lane = 0; lane < seg.lanesAtoB; lane++) {
-        const ep = getArrivalEndpoint(seg, nodes, segsAtNode, nodeId, lane, "AtoB");
-        if (ep) incoming.push({ seg, dir: "AtoB", lane, ep });
-      }
-    }
-    if (seg.nodeA === nodeId) {
-      // BtoA traffic arrives at nodeA
-      for (let lane = 0; lane < seg.lanesBtoA; lane++) {
-        const ep = getArrivalEndpoint(seg, nodes, segsAtNode, nodeId, lane, "BtoA");
-        if (ep) incoming.push({ seg, dir: "BtoA", lane, ep });
-      }
-    }
-  }
-
-  // Collect outgoing lanes (departing from nodeId)
-  const outgoing = [];
-  for (const seg of segsAtNode) {
-    if (seg.nodeA === nodeId) {
-      // AtoB traffic departs from nodeA
-      for (let lane = 0; lane < seg.lanesAtoB; lane++) {
-        const ep = getDepartureEndpoint(seg, nodes, segsAtNode, nodeId, lane, "AtoB");
-        if (ep) outgoing.push({ seg, dir: "AtoB", lane, ep });
-      }
-    }
-    if (seg.nodeB === nodeId) {
-      // BtoA traffic departs from nodeB
-      for (let lane = 0; lane < seg.lanesBtoA; lane++) {
-        const ep = getDepartureEndpoint(seg, nodes, segsAtNode, nodeId, lane, "BtoA");
-        if (ep) outgoing.push({ seg, dir: "BtoA", lane, ep });
-      }
-    }
-  }
-
-  for (const inc of incoming) {
+  for (const inc of incomingLanes) {
     const inHeading = inc.ep.heading;
-    const totalInLanes = (inc.dir === "AtoB") ? inc.seg.lanesAtoB : inc.seg.lanesBtoA;
+    const totalInLanes = segsAtNode.find(s => s.id === inc.segId)
+      ? (inc.dir === "AtoB"
+          ? segsAtNode.find(s => s.id === inc.segId).lanesAtoB
+          : segsAtNode.find(s => s.id === inc.segId).lanesBtoA)
+      : 1;
 
-    for (const out of outgoing) {
-      if (out.seg.id === inc.seg.id) continue; // no U-turn on same segment
+    for (const out of outgoingLanes) {
+      if (out.segId === inc.segId) continue; // no U-turn
 
       const outHeading = out.ep.heading;
       const turnType = classifyTurn(inHeading, outHeading);
-      const totalOutLanes = (out.dir === "AtoB") ? out.seg.lanesAtoB : out.seg.lanesBtoA;
+      const outSeg = segsAtNode.find(s => s.id === out.segId);
+      const totalOutLanes = outSeg
+        ? (out.dir === "AtoB" ? outSeg.lanesAtoB : outSeg.lanesBtoA)
+        : 1;
 
       let allowed = false;
       if (turnType === "right") {
-        allowed = (inc.lane === 0 && out.lane === 0);
+        allowed = (inc.laneIdx === 0 && out.laneIdx === 0);
       } else if (turnType === "left") {
-        allowed = (inc.lane === totalInLanes - 1 && out.lane === totalOutLanes - 1);
+        allowed = (inc.laneIdx === totalInLanes - 1 && out.laneIdx === totalOutLanes - 1);
       } else {
-        // straight: lane i → min(i, M-1)
-        allowed = (out.lane === Math.min(inc.lane, totalOutLanes - 1));
+        allowed = (out.laneIdx === Math.min(inc.laneIdx, totalOutLanes - 1));
       }
 
       if (!allowed) continue;
@@ -167,12 +165,12 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, connectorIdRef) {
       connectors.push({
         id: connectorIdRef.value++,
         nodeId,
-        inSegId: inc.seg.id,
+        inSegId: inc.segId,
         inDir: inc.dir,
-        inLane: inc.lane,
-        outSegId: out.seg.id,
+        inLane: inc.laneIdx,
+        outSegId: out.segId,
         outDir: out.dir,
-        outLane: out.lane,
+        outLane: out.laneIdx,
         path,
         signalPhase: 0,
         userDefined: false,
@@ -185,10 +183,54 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, connectorIdRef) {
 
 /**
  * Build a complete junction (polygon + connectors) for a node.
- * connectorIdRef: { value: number } — mutated in place for ID assignment
+ * userConnsForNode: Map<inKey, Set<outKey>> from state.userConnectors, or undefined.
  */
-export function buildJunction(nodeId, nodes, segsAtNode, connectorIdRef) {
+export function buildJunction(nodeId, nodes, segsAtNode, connectorIdRef, userConnsForNode) {
   const polygon = buildJunctionPolygon(nodeId, nodes, segsAtNode);
-  const connectors = buildDefaultConnectors(nodeId, nodes, segsAtNode, connectorIdRef);
-  return { polygon, connectors };
+  const { incomingLanes, outgoingLanes } = collectLaneEndpoints(nodeId, nodes, segsAtNode);
+  const connectors = buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoingLanes, connectorIdRef);
+
+  // Apply user overrides: for each incoming lane that has user-defined connections,
+  // replace the auto-generated connectors for that lane with user-defined ones.
+  if (userConnsForNode && userConnsForNode.size > 0) {
+    for (const [inKey, outKeys] of userConnsForNode) {
+      if (outKeys.size === 0) continue;
+      const [segIdStr, inDir, laneIdxStr] = inKey.split(":");
+      const inSegId = parseInt(segIdStr);
+      const inLane = parseInt(laneIdxStr);
+
+      // Remove auto-generated connectors for this incoming lane
+      for (let i = connectors.length - 1; i >= 0; i--) {
+        const c = connectors[i];
+        if (c.inSegId === inSegId && c.inDir === inDir && c.inLane === inLane) {
+          connectors.splice(i, 1);
+        }
+      }
+
+      const incLane = incomingLanes.find(l => l.segId === inSegId && l.dir === inDir && l.laneIdx === inLane);
+      if (!incLane) continue;
+
+      for (const outKey of outKeys) {
+        const [oSegIdStr, oDir, oLaneIdxStr] = outKey.split(":");
+        const oSegId = parseInt(oSegIdStr);
+        const oLane = parseInt(oLaneIdxStr);
+        const outLane = outgoingLanes.find(l => l.segId === oSegId && l.dir === oDir && l.laneIdx === oLane);
+        if (!outLane) continue;
+
+        const pts = buildConnectorBezier(incLane.ep, outLane.ep);
+        const path = polylineMetrics(pts);
+        connectors.push({
+          id: connectorIdRef.value++,
+          nodeId,
+          inSegId, inDir, inLane,
+          outSegId: oSegId, outDir: oDir, outLane: oLane,
+          path,
+          signalPhase: 0,
+          userDefined: true,
+        });
+      }
+    }
+  }
+
+  return { polygon, connectors, incomingLanes, outgoingLanes };
 }

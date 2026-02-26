@@ -39,6 +39,7 @@ export const state = {
   nextConnectorId: 1,
   signals: new Map(),        // nodeId → TrafficSignal
   laneArrows: new Map(),     // "segId:dir:laneIdx" → Set<"left"|"straight"|"right">
+  userConnectors: new Map(), // nodeId → Map<inKey, Set<outKey>>  "segId:dir:laneIdx"
   cars: [],
   pendingSpawns: 0,
   networkDirty: true,
@@ -57,4 +58,5 @@ export const state = {
   paused: false,
   signalTime: 0,
   selectedCarId: null,
+  connectorTool: { editingNodeId: null, selectedInKey: null },
 };

@@ -1,5 +1,5 @@
 import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
-import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier } from "./geometry.js";
+import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
 import { saveState } from "./persistence.js";
@@ -12,6 +12,7 @@ let junctionGraphics = null;
 let roadsGraphics = null;
 let laneMarkingsGraphics = null;
 let tmpeOverlayGraphics = null;
+let connectorOverlayGraphics = null;
 let routeGraphics = null;
 let signalGraphics = null;
 let nodeGraphics = null;
@@ -38,6 +39,7 @@ export async function initRenderer() {
   roadsGraphics      = new PIXI.Graphics();
   laneMarkingsGraphics = new PIXI.Graphics();
   tmpeOverlayGraphics  = new PIXI.Graphics();
+  connectorOverlayGraphics = new PIXI.Graphics();
   routeGraphics        = new PIXI.Graphics();
   signalGraphics       = new PIXI.Graphics();
   nodeGraphics       = new PIXI.Graphics();
@@ -52,6 +54,7 @@ export async function initRenderer() {
   camera.addChild(laneMarkingsGraphics);
   camera.addChild(speedLabelsContainer);
   camera.addChild(tmpeOverlayGraphics);
+  camera.addChild(connectorOverlayGraphics);
   camera.addChild(routeGraphics);
   camera.addChild(signalGraphics);
   camera.addChild(nodeGraphics);
@@ -715,9 +718,91 @@ export function setTool(tool) {
   state.drawingSegment = null;
   state.hoveredSegId = null;
   state.hoveredLane = null;
+  state.connectorTool.editingNodeId = null;
+  state.connectorTool.selectedInKey = null;
   if (canvas) canvas.style.cursor = tool === "select" ? "default" : "crosshair";
 
   document.querySelectorAll("button[data-tool]").forEach(b => {
     b.classList.toggle("active", b.dataset.tool === tool);
   });
+}
+
+function laneEndpointColor(segId) {
+  return hslToHex((segId * 137.5 % 360) / 360, 0.65, 0.58);
+}
+
+export function drawConnectorTool() {
+  connectorOverlayGraphics.clear();
+  if (state.tool !== "connector") return;
+
+  if (state.networkDirty) rebuildJunctions();
+
+  const ct = state.connectorTool;
+
+  if (ct.editingNodeId === null) {
+    // Highlight all nodes that have junctions (hoverable)
+    for (const [nodeId, junc] of state.junctions) {
+      if (junc.connectors.length === 0) continue;
+      const node = state.nodes.get(nodeId);
+      if (!node) continue;
+      const hovered = state.hoveredNodeId === nodeId;
+      connectorOverlayGraphics.circle(node.x, node.y, 18);
+      connectorOverlayGraphics.stroke({ color: hovered ? 0xffd700 : 0x88bbdd, width: 2 / state.view.zoom, alpha: 0.7 });
+    }
+    return;
+  }
+
+  const junc = state.junctions.get(ct.editingNodeId);
+  if (!junc) return;
+
+  const [selSegIdStr, selDir, selLaneStr] = ct.selectedInKey ? ct.selectedInKey.split(":") : [];
+  const selSegId = selSegIdStr ? parseInt(selSegIdStr) : null;
+  const selLane  = selLaneStr  ? parseInt(selLaneStr)  : null;
+
+  // Draw all connectors
+  for (const conn of junc.connectors) {
+    const isFromSelected = ct.selectedInKey &&
+      conn.inSegId === selSegId && conn.inDir === selDir && conn.inLane === selLane;
+    const color = conn.userDefined ? COLORS.selected : 0x3399ff;
+    const alpha = isFromSelected ? 1.0 : (conn.userDefined ? 0.75 : 0.3);
+    const width = isFromSelected ? 4 : 2.5;
+    const pts = conn.path.points;
+    connectorOverlayGraphics.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) connectorOverlayGraphics.lineTo(pts[i].x, pts[i].y);
+    connectorOverlayGraphics.stroke({ color, width, alpha });
+  }
+
+  // Draw outgoing endpoints
+  for (const out of junc.outgoingLanes) {
+    const outKey = `${out.segId}:${out.dir}:${out.laneIdx}`;
+    const color = laneEndpointColor(out.segId);
+    const isTarget = ct.selectedInKey !== null && out.segId !== selSegId;
+    const hasConn = ct.selectedInKey && junc.connectors.some(c =>
+      c.inSegId === selSegId && c.inDir === selDir && c.inLane === selLane &&
+      c.outSegId === out.segId && c.outDir === out.dir && c.outLane === out.laneIdx
+    );
+    const r = isTarget ? 9 : 6;
+    connectorOverlayGraphics.circle(out.ep.x, out.ep.y, r);
+    if (isTarget) {
+      connectorOverlayGraphics.fill({ color: hasConn ? COLORS.selected : color, alpha: 0.85 });
+      connectorOverlayGraphics.circle(out.ep.x, out.ep.y, r + 2);
+      connectorOverlayGraphics.stroke({ color: hasConn ? 0xffffff : 0xaaaaaa, width: 1.5 });
+    } else {
+      connectorOverlayGraphics.stroke({ color, width: 1.5, alpha: 0.5 });
+    }
+  }
+
+  // Draw incoming endpoints
+  for (const inc of junc.incomingLanes) {
+    const inKey = `${inc.segId}:${inc.dir}:${inc.laneIdx}`;
+    const selected = ct.selectedInKey === inKey;
+    const color = laneEndpointColor(inc.segId);
+    const r = selected ? 10 : 7;
+    connectorOverlayGraphics.circle(inc.ep.x, inc.ep.y, r);
+    connectorOverlayGraphics.fill({ color: selected ? 0xffd700 : color });
+    if (selected) {
+      connectorOverlayGraphics.circle(inc.ep.x, inc.ep.y, r + 3);
+      connectorOverlayGraphics.stroke({ color: 0xffffff, width: 2 });
+    }
+  }
 }

@@ -255,6 +255,70 @@ export function setupInput() {
 let dragNodeId = null;
 let dragOffset = { x: 0, y: 0 };
 
+function toggleUserConnector(nodeId, inKey, outKey) {
+  if (!state.userConnectors.has(nodeId)) state.userConnectors.set(nodeId, new Map());
+  const nodeMap = state.userConnectors.get(nodeId);
+  if (!nodeMap.has(inKey)) nodeMap.set(inKey, new Set());
+  const outSet = nodeMap.get(inKey);
+  if (outSet.has(outKey)) {
+    outSet.delete(outKey);
+    if (outSet.size === 0) nodeMap.delete(inKey);
+    if (nodeMap.size === 0) state.userConnectors.delete(nodeId);
+  } else {
+    outSet.add(outKey);
+  }
+  rebuildJunctions();
+  saveState();
+}
+
+function handleConnectorToolClick(wx, wy) {
+  const ct = state.connectorTool;
+  const hitRadius = 14 / state.view.zoom;
+
+  if (ct.editingNodeId === null) {
+    // Enter edit mode: click near a node that has a junction
+    const nodeId = snapToNode(wx, wy);
+    if (nodeId !== null && state.junctions.has(nodeId)) ct.editingNodeId = nodeId;
+    return;
+  }
+
+  const junc = state.junctions.get(ct.editingNodeId);
+  if (!junc) { ct.editingNodeId = null; return; }
+
+  // Check incoming endpoints first
+  for (const inc of junc.incomingLanes) {
+    if (Math.hypot(inc.ep.x - wx, inc.ep.y - wy) < hitRadius) {
+      const key = `${inc.segId}:${inc.dir}:${inc.laneIdx}`;
+      ct.selectedInKey = (ct.selectedInKey === key) ? null : key;
+      return;
+    }
+  }
+
+  // Check outgoing endpoints (only when an incoming lane is selected)
+  if (ct.selectedInKey) {
+    const [segIdStr, inDir] = ct.selectedInKey.split(":");
+    const inSegId = parseInt(segIdStr);
+    for (const out of junc.outgoingLanes) {
+      if (out.segId === inSegId) continue; // skip U-turn
+      if (Math.hypot(out.ep.x - wx, out.ep.y - wy) < hitRadius) {
+        const outKey = `${out.segId}:${out.dir}:${out.laneIdx}`;
+        toggleUserConnector(ct.editingNodeId, ct.selectedInKey, outKey);
+        return;
+      }
+    }
+  }
+
+  // Click elsewhere: switch node or exit
+  const nodeId = snapToNode(wx, wy);
+  if (nodeId !== null && nodeId !== ct.editingNodeId && state.junctions.has(nodeId)) {
+    ct.editingNodeId = nodeId;
+    ct.selectedInKey = null;
+  } else if (nodeId === null) {
+    ct.editingNodeId = null;
+    ct.selectedInKey = null;
+  }
+}
+
 function onPointerDown(e) {
   const world = screenToWorld(e.offsetX, e.offsetY);
   state.lastMouse = { x: e.offsetX, y: e.offsetY };
@@ -267,6 +331,12 @@ function onPointerDown(e) {
   }
 
   if (e.button !== 0) return;
+
+  // Connector tool
+  if (state.tool === "connector") {
+    handleConnectorToolClick(world.x, world.y);
+    return;
+  }
 
   // Signal tool
   if (state.tool === "signal") {
@@ -473,6 +543,8 @@ function onKeyDown(e) {
     }
     state.drawingSegment = null;
     dragNodeId = null;
+    state.connectorTool.editingNodeId = null;
+    state.connectorTool.selectedInKey = null;
   }
   if (e.key === "Delete" || e.key === "Backspace") {
     if (state.selectedNodeId !== null) {
@@ -489,6 +561,7 @@ function onKeyDown(e) {
   if (e.key === "v" || e.key === "V") setTool("speed");
   if (e.key === "a" || e.key === "A") setTool("arrow");
   if (e.key === "t" || e.key === "T") setTool("signal");
+  if (e.key === "c" || e.key === "C") setTool("connector");
   if (e.key === "p" || e.key === "P") document.getElementById("pauseBtn")?.click();
 }
 
