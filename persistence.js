@@ -40,7 +40,16 @@ export function loadState() {
     state.nextSegmentId = data.nextSegmentId ?? 1;
     state.nextConnectorId = data.nextConnectorId ?? 1;
     state.nodes = new Map(data.nodes);
-    state.segments = new Map(data.segments);
+    state.segments = new Map(
+      (data.segments ?? []).map(([id, seg]) => [
+        id,
+        {
+          ...seg,
+          lanesAtoB: Math.max(1, seg?.lanesAtoB ?? 1),
+          lanesBtoA: Math.max(1, seg?.lanesBtoA ?? 1),
+        },
+      ])
+    );
     state.laneArrows = new Map(
       (data.laneArrows ?? []).map(([k, v]) => [k, new Set(v)])
     );

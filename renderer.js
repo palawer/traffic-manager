@@ -714,9 +714,13 @@ export function setupUi() {
     saveState();
   }
   const SPEED_CYCLE = SPEED_PRESETS;
-  document.getElementById("atobMinus").addEventListener("click", () => withSeg(s => { if (s.lanesAtoB + s.lanesBtoA > 1) s.lanesAtoB = Math.max(0, s.lanesAtoB - 1); }));
+  document.getElementById("atobMinus").addEventListener("click", () => withSeg(s => {
+    s.lanesAtoB = Math.max(1, s.lanesAtoB - 1);
+  }));
   document.getElementById("atobPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesAtoB < MAX_LANES) s.lanesAtoB++; }));
-  document.getElementById("btoaMinus").addEventListener("click", () => withSeg(s => { if (s.lanesAtoB + s.lanesBtoA > 1) s.lanesBtoA = Math.max(0, s.lanesBtoA - 1); }));
+  document.getElementById("btoaMinus").addEventListener("click", () => withSeg(s => {
+    s.lanesBtoA = Math.max(1, s.lanesBtoA - 1);
+  }));
   document.getElementById("btoaPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesBtoA < MAX_LANES) s.lanesBtoA++; }));
   document.getElementById("propSpeedBtn").addEventListener("click", () => withSeg(s => {
     s.speedLimit = SPEED_CYCLE[(SPEED_CYCLE.indexOf(s.speedLimit) + 1) % SPEED_CYCLE.length];

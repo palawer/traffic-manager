@@ -156,6 +156,7 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoi
   const connectors = [];
   if (incomingLanes.length === 0 || outgoingLanes.length === 0) return connectors;
   const isDeadEnd = segsAtNode.length === 1;
+  const isSimpleBend = segsAtNode.length === 2;
 
   for (const inc of incomingLanes) {
     const inHeading = inc.ep.heading;
@@ -164,6 +165,7 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoi
           ? segsAtNode.find(s => s.id === inc.segId).lanesAtoB
           : segsAtNode.find(s => s.id === inc.segId).lanesBtoA)
       : 1;
+    let addedForIncoming = 0;
 
     for (const out of outgoingLanes) {
       const sameSegment = out.segId === inc.segId;
@@ -182,6 +184,9 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoi
       let allowed = false;
       if (sameSegment && isDeadEnd) {
         // Dead-end turn-back: keep lane index when possible.
+        allowed = (out.laneIdx === Math.min(inc.laneIdx, totalOutLanes - 1));
+      } else if (isSimpleBend && !sameSegment) {
+        // Two-road bend: lane continuity for all lanes.
         allowed = (out.laneIdx === Math.min(inc.laneIdx, totalOutLanes - 1));
       } else if (turnType === "right") {
         allowed = (inc.laneIdx === 0 && out.laneIdx === 0);
@@ -209,6 +214,52 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoi
         signalPhase: 0,
         userDefined: false,
       });
+      addedForIncoming++;
+    }
+
+    // Safety fallback: ensure every incoming lane has at least one exit trajectory.
+    // This avoids "dead lanes" after changing lane counts.
+    if (addedForIncoming === 0) {
+      let bestOut = null;
+      let bestScore = Infinity;
+
+      for (const out of outgoingLanes) {
+        const sameSegment = out.segId === inc.segId;
+        if (sameSegment) {
+          if (!isDeadEnd || out.dir === inc.dir) continue;
+        }
+
+        const outSeg = segsAtNode.find(s => s.id === out.segId);
+        const totalOutLanes = outSeg
+          ? (out.dir === "AtoB" ? outSeg.lanesAtoB : outSeg.lanesBtoA)
+          : 1;
+        const mappedLane = Math.min(inc.laneIdx, totalOutLanes - 1);
+        if (out.laneIdx !== mappedLane) continue;
+
+        const score = Math.abs(normalizeAngle(out.ep.heading - inHeading));
+        if (score < bestScore) {
+          bestScore = score;
+          bestOut = out;
+        }
+      }
+
+      if (bestOut) {
+        const pts = buildConnectorBezier(inc.ep, bestOut.ep);
+        const path = polylineMetrics(pts);
+        connectors.push({
+          id: connectorIdRef.value++,
+          nodeId,
+          inSegId: inc.segId,
+          inDir: inc.dir,
+          inLane: inc.laneIdx,
+          outSegId: bestOut.segId,
+          outDir: bestOut.dir,
+          outLane: bestOut.laneIdx,
+          path,
+          signalPhase: 0,
+          userDefined: false,
+        });
+      }
     }
   }
 
