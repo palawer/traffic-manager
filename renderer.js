@@ -190,8 +190,14 @@ function drawBendJunction(g, nodeId, segs) {
   const a1 = Math.atan2(other1.y - node.y, other1.x - node.x);
   const a2 = Math.atan2(other2.y - node.y, other2.x - node.x);
 
-  const inset1 = junctionInset(s1, segs);
-  const inset2 = junctionInset(s2, segs);
+  // Keep bend insets consistent with segment body clipping so wide roads
+  // (many lanes) still connect smoothly on short segments.
+  const rawInset1 = junctionInset(s1, segs);
+  const rawInset2 = junctionInset(s2, segs);
+  const len1 = Math.hypot(other1.x - node.x, other1.y - node.y) || 1;
+  const len2 = Math.hypot(other2.x - node.x, other2.y - node.y) || 1;
+  const inset1 = Math.min(rawInset1, Math.max(0, len1 - 5));
+  const inset2 = Math.min(rawInset2, Math.max(0, len2 - 5));
 
   // Stop-line centres (road axis, no lane offset)
   const from = {
