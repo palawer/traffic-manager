@@ -157,7 +157,7 @@ export const CAR_ACCEL      = 60;   // px/s² when accelerating
 export const CAR_BRAKE      = 100;  // px/s² when braking
 
 // ── Car following ─────────────────────────────────────────────────────────────
-export const CAR_STOP_DIST  = 24;   // px to obstacle → full stop
+export const CAR_STOP_DIST  = 16;   // px to obstacle → full stop
 export const CAR_SLOW_DIST  = 40;   // px to obstacle → slow to CAR_SLOW_FACTOR
 export const CAR_SLOW_FACTOR = 0.4; // speed multiplier in slow zone
 
