@@ -1,6 +1,7 @@
 import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
 import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   CONNECTOR_PATH_WIDTH, CONNECTOR_PATH_COLOR, CONNECTOR_PATH_ALPHA,
+  DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH, DEBUG_PATH_CONNECTOR_WIDTH,
   CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP,
   NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS,
   SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE } from "./config.js";
@@ -294,8 +295,8 @@ export function drawRoads() {
   }
 
   if (state.debugLanes) {
-    const lineW = 2.2;
-    const connectorW = 2.6;
+    const lineW = DEBUG_PATH_SEGMENT_WIDTH;
+    const connectorW = DEBUG_PATH_CONNECTOR_WIDTH;
 
     // 1) Segment lane centerlines: exactly where cars run on segments.
     for (const seg of state.segments.values()) {
@@ -304,14 +305,24 @@ export function drawRoads() {
         if (!path || path.points.length < 2) continue;
         debugTrajectoriesGraphics.moveTo(path.points[0].x, path.points[0].y);
         for (let i = 1; i < path.points.length; i++) debugTrajectoriesGraphics.lineTo(path.points[i].x, path.points[i].y);
-        debugTrajectoriesGraphics.stroke({ width: lineW, color: COLORS.debugLane, alpha: 0.98, pixelLine: true });
+        debugTrajectoriesGraphics.stroke({
+          width: lineW,
+          color: COLORS.debugLane,
+          alpha: DEBUG_PATH_ALPHA,
+          pixelLine: true,
+        });
       }
       for (let lane = 0; lane < seg.lanesBtoA; lane++) {
         const path = buildLanePath(seg, state.nodes, "BtoA", lane);
         if (!path || path.points.length < 2) continue;
         debugTrajectoriesGraphics.moveTo(path.points[0].x, path.points[0].y);
         for (let i = 1; i < path.points.length; i++) debugTrajectoriesGraphics.lineTo(path.points[i].x, path.points[i].y);
-        debugTrajectoriesGraphics.stroke({ width: lineW, color: COLORS.debugLane, alpha: 0.98, pixelLine: true });
+        debugTrajectoriesGraphics.stroke({
+          width: lineW,
+          color: COLORS.debugLane,
+          alpha: DEBUG_PATH_ALPHA,
+          pixelLine: true,
+        });
       }
     }
 
@@ -322,7 +333,12 @@ export function drawRoads() {
         if (!pts || pts.length < 2) continue;
         debugTrajectoriesGraphics.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) debugTrajectoriesGraphics.lineTo(pts[i].x, pts[i].y);
-        debugTrajectoriesGraphics.stroke({ width: connectorW, color: COLORS.debugLane, alpha: 1, pixelLine: true });
+        debugTrajectoriesGraphics.stroke({
+          width: connectorW,
+          color: COLORS.debugLane,
+          alpha: DEBUG_PATH_ALPHA,
+          pixelLine: true,
+        });
       }
     }
   }

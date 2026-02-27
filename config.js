@@ -31,6 +31,12 @@ export const CONNECTOR_PATH_WIDTH     = 6;       // world px width of connector 
 export const CONNECTOR_PATH_COLOR     = 0x555555; // color of connector path markings
 export const CONNECTOR_PATH_ALPHA     = 0.5;    // opacity of connector path markings
 
+// ── Debug lanes ───────────────────────────────────────────────────────────────
+export const DEBUG_PATH_COLOR           = 0x00b7ff; // bright blue
+export const DEBUG_PATH_ALPHA           = 1.0;
+export const DEBUG_PATH_SEGMENT_WIDTH   = 2.2;      // px on screen (pixelLine=true)
+export const DEBUG_PATH_CONNECTOR_WIDTH = 2.6;      // px on screen (pixelLine=true)
+
 // ── Traffic signals ───────────────────────────────────────────────────────────
 export const SIGNAL_PHASE_DURATION = 5;   // seconds each phase stays green
 export const SIGNAL_RADIUS         = 5;   // radius of signal dot (world px)

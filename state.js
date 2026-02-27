@@ -1,5 +1,5 @@
 export { LANE_WIDTH, GRID, NODE_SNAP_DIST, JOIN_GRACE_TIME } from "./config.js";
-import { COLOR_ROAD, COLOR_CENTERLINE } from "./config.js";
+import { COLOR_ROAD, COLOR_CENTERLINE, DEBUG_PATH_COLOR } from "./config.js";
 export const ROAD_WIDTH = 44; // kept for compat (2 × LANE_WIDTH)
 
 export const COLORS = {
@@ -21,7 +21,7 @@ export const COLORS = {
   trafficRed: 0xff453a,
   trafficPole: 0x1f252b,
   carStroke: 0x172028,
-  debugLane: 0x00b7ff,
+  debugLane: DEBUG_PATH_COLOR,
   connectorPath: 0x00ccff,
   arrowGreen: 0x35c759,
   previewRoad: 0x5a9fd4,
