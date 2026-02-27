@@ -214,6 +214,13 @@ function updateCarOnSegment(car, dt) {
     if (!seg) { car.remove = true; return; }
 
     const destNodeId = getDestinationNode(seg, car.dir);
+
+    // Last step: pick a new random destination using the full current network
+    if (!nextStep) {
+      if (!rerouteFrom(car, destNodeId)) return;
+      nextStep = car.laneSeq[car.routeStep + 1]; // laneSeq[0] since routeStep = -1
+    }
+
     const conn = nextStep
       ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
       : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
@@ -229,9 +236,8 @@ function updateCarOnSegment(car, dt) {
       // Wait at stop line
       car.s = car.path.length - 1;
       car.speed = 0;
-      car.joinGrace = JOIN_GRACE_TIME; // prevent false crash when cars queue here
+      car.joinGrace = JOIN_GRACE_TIME;
     } else {
-      // Dead end or last step — remove car
       car.remove = true;
     }
   }
@@ -349,6 +355,32 @@ function advanceRouteStepIfMatches(car, segId, dir, laneIdx) {
       car.routeStep = nextStep;
     }
   }
+}
+
+/**
+ * Assign a new random destination to a car that has reached its current one.
+ * Sets car.route, car.laneSeq, car.routeStep = -1 (so routeStep+1 = 0 = first step).
+ * Returns false and sets car.remove if no reachable destination exists.
+ */
+function rerouteFrom(car, fromNodeId) {
+  const nodeIds = [...state.nodes.keys()];
+  const candidates = nodeIds.filter(id => id !== fromNodeId);
+  if (candidates.length === 0) { car.remove = true; return false; }
+
+  // Try random destinations until a valid route is found
+  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+  for (const toNodeId of shuffled) {
+    const route = findRoute(fromNodeId, toNodeId);
+    if (!route || route.length < 2) continue;
+    const laneSeq = routeToLaneSequence(route);
+    if (laneSeq.length === 0) continue;
+    car.route = route;
+    car.laneSeq = laneSeq;
+    car.routeStep = -1; // advances to 0 when entering the first junction
+    return true;
+  }
+  car.remove = true;
+  return false;
 }
 
 function applyAcceleration(car, target, dt) {
