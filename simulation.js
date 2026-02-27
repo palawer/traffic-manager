@@ -6,6 +6,8 @@ import {
   CAR_STOP_DIST, CAR_SLOW_DIST, CAR_SLOW_FACTOR,
   JUNCTION_LOOKAHEAD, JUNCTION_STOP_DIST, JUNCTION_ENTRY_THRESHOLD,
   CRASH_DIST, EXPLOSION_DURATION, EXPLOSION_SPARKS,
+  CAR_BODY_HALF_LENGTH,
+  STOP_LINE_CLEARANCE,
 } from "./config.js";
 import { pointAtPath, headingAtPath, hslToHex } from "./geometry.js";
 import { rebuildJunctions, getNodeSegments, findConnector, getDestinationNode } from "./network.js";
@@ -156,6 +158,8 @@ export function updateCars(dt) {
 
 function updateCarOnSegment(car, dt) {
   const remToEnd = car.path.length - car.s;
+  let stopBeforeLineS = null;
+  const stopLineHoldS = Math.max(0, car.path.length - CAR_BODY_HALF_LENGTH - STOP_LINE_CLEARANCE);
 
   // Collision detection with cars on same segment/lane
   let obstacleDist = Infinity;
@@ -186,10 +190,13 @@ function updateCarOnSegment(car, dt) {
         ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
         : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
       if (conn) {
-        if (!isConnectorGreen(conn)) target = 0;
-        if (isJunctionBlocked(conn)) target = 0;
+        if (!isConnectorGreen(conn) || isJunctionBlocked(conn)) {
+          target = 0;
+          stopBeforeLineS = stopLineHoldS;
+        }
       } else {
         if (remToEnd < JUNCTION_STOP_DIST) target = 0;
+        stopBeforeLineS = stopLineHoldS;
       }
     }
   }
@@ -207,7 +214,14 @@ function updateCarOnSegment(car, dt) {
     if (other.s <= car.s) continue;
     advance = Math.min(advance, Math.max(0, other.s - car.s - CAR_STOP_DIST));
   }
+  if (stopBeforeLineS !== null) {
+    advance = Math.min(advance, Math.max(0, stopBeforeLineS - car.s));
+  }
   car.s += advance;
+  if (stopBeforeLineS !== null && car.s >= stopBeforeLineS) {
+    car.s = stopBeforeLineS;
+    if (target <= 0) car.speed = 0;
+  }
 
   if (car.s >= car.path.length) {
     car.s = car.path.length;
@@ -239,8 +253,8 @@ function updateCarOnSegment(car, dt) {
       car.junctionS = 0;
       car.joinGrace = JOIN_GRACE_TIME;
     } else if (conn) {
-      // Wait at stop line
-      car.s = car.path.length - 1;
+      // Wait just before the stop line (car nose at line, not on top of it)
+      car.s = stopLineHoldS;
       car.speed = 0;
       car.joinGrace = JOIN_GRACE_TIME;
     } else {

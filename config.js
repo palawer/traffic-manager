@@ -165,6 +165,7 @@ export const CAR_SLOW_FACTOR = 0.4; // speed multiplier in slow zone
 export const JUNCTION_LOOKAHEAD        = 50; // px before junction to start checking signals
 export const JUNCTION_STOP_DIST        = 5;  // px from segment end to stop if no connector
 export const JUNCTION_ENTRY_THRESHOLD  = 30; // a car must advance this far before next enters
+export const STOP_LINE_CLEARANCE       = 4;  // extra px before stop line (in addition to car nose)
 
 // ── Editor hit radii (world px, before zoom) ──────────────────────────────────
 export const HIT_NODE         = 12;  // select a node
