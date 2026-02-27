@@ -186,9 +186,13 @@ function updateCarOnSegment(car, dt) {
     const junc = state.junctions.get(destNodeId);
 
     if (junc && junc.connectors.length > 0) {
-      const conn = nextStep
+      let conn = nextStep
         ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
         : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
+      if (!conn) {
+        // Keep lookahead behavior consistent with junction-entry fallback.
+        conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
+      }
       if (conn) {
         if (!isConnectorGreen(conn) || isJunctionBlocked(conn)) {
           target = 0;
