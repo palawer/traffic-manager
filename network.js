@@ -2,6 +2,31 @@ import { state } from "./state.js";
 import { buildJunction } from "./junction.js";
 import { saveState } from "./persistence.js";
 
+let nodeSegmentsCache = null;
+let cacheNodesRef = null;
+let cacheSegmentsRef = null;
+
+function invalidateNodeSegmentsCache() {
+  nodeSegmentsCache = null;
+  cacheNodesRef = null;
+  cacheSegmentsRef = null;
+}
+
+function ensureNodeSegmentsCache() {
+  if (nodeSegmentsCache && cacheNodesRef === state.nodes && cacheSegmentsRef === state.segments) return;
+  nodeSegmentsCache = new Map();
+  cacheNodesRef = state.nodes;
+  cacheSegmentsRef = state.segments;
+
+  for (const nodeId of state.nodes.keys()) nodeSegmentsCache.set(nodeId, []);
+  for (const seg of state.segments.values()) {
+    if (!nodeSegmentsCache.has(seg.nodeA)) nodeSegmentsCache.set(seg.nodeA, []);
+    if (!nodeSegmentsCache.has(seg.nodeB)) nodeSegmentsCache.set(seg.nodeB, []);
+    nodeSegmentsCache.get(seg.nodeA).push(seg);
+    nodeSegmentsCache.get(seg.nodeB).push(seg);
+  }
+}
+
 /** Remove laneArrow entries that reference a deleted segment */
 function pruneLaneArrowsForSeg(segId) {
   for (const key of state.laneArrows.keys()) {
@@ -29,6 +54,7 @@ function pruneUserConnectorsForSeg(segId) {
 export function addNode(x, y) {
   const id = state.nextNodeId++;
   state.nodes.set(id, { id, x, y });
+  invalidateNodeSegmentsCache();
   state.networkDirty = true;
   return id;
 }
@@ -48,6 +74,7 @@ export function removeNode(nodeId) {
       state.junctions.delete(otherId);
     }
   }
+  invalidateNodeSegmentsCache();
   state.networkDirty = true;
 }
 
@@ -61,6 +88,7 @@ export function addSegment(nodeAId, nodeBId, lanesAtoB = 1, lanesBtoA = 1, speed
   }
   const id = state.nextSegmentId++;
   state.segments.set(id, { id, nodeA: nodeAId, nodeB: nodeBId, lanesAtoB, lanesBtoA, speedLimit });
+  invalidateNodeSegmentsCache();
   state.networkDirty = true;
   return id;
 }
@@ -73,16 +101,14 @@ export function removeSegment(segId) {
   pruneUserConnectorsForSeg(segId);
   state.junctions.delete(seg.nodeA);
   state.junctions.delete(seg.nodeB);
+  invalidateNodeSegmentsCache();
   state.networkDirty = true;
 }
 
 /** Returns all segments connected to a node */
 export function getNodeSegments(nodeId) {
-  const result = [];
-  for (const seg of state.segments.values()) {
-    if (seg.nodeA === nodeId || seg.nodeB === nodeId) result.push(seg);
-  }
-  return result;
+  ensureNodeSegmentsCache();
+  return nodeSegmentsCache.get(nodeId) || [];
 }
 
 /** Rebuild junction polygons and lane connectors for all nodes */

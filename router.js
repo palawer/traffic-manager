@@ -99,15 +99,18 @@ export function routeToLaneSequence(routeNodeIds) {
   const segments = state.segments;
   const laneArrows = state.laneArrows;
   const sequence = [];
+  const segmentByPair = new Map();
+
+  function pairKey(aNodeId, bNodeId) {
+    return aNodeId < bNodeId ? `${aNodeId}:${bNodeId}` : `${bNodeId}:${aNodeId}`;
+  }
+
+  for (const seg of segments.values()) {
+    segmentByPair.set(pairKey(seg.nodeA, seg.nodeB), seg);
+  }
 
   function findSegmentBetween(aNodeId, bNodeId) {
-    for (const s of segments.values()) {
-      if ((s.nodeA === aNodeId && s.nodeB === bNodeId) ||
-          (s.nodeA === bNodeId && s.nodeB === aNodeId)) {
-        return s;
-      }
-    }
-    return null;
+    return segmentByPair.get(pairKey(aNodeId, bNodeId)) || null;
   }
 
   function connectorExists(nodeId, inSegId, inDir, inLane, outSegId, outDir) {

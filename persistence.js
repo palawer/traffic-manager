@@ -1,31 +1,53 @@
 import { state } from "./state.js";
 
 const KEY = "traffic_manager_v1";
+const SAVE_MIN_INTERVAL_MS = 250;
+let lastSaveAt = 0;
+let saveTimer = null;
+
+function writeStateSnapshot() {
+  const data = {
+    nextNodeId: state.nextNodeId,
+    nextSegmentId: state.nextSegmentId,
+    nextConnectorId: state.nextConnectorId,
+    nodes: [...state.nodes.entries()],
+    segments: [...state.segments.entries()],
+    laneArrows: [...state.laneArrows.entries()].map(([k, v]) => [k, [...v]]),
+    userConnectors: [...state.userConnectors.entries()].map(([nodeId, nodeMap]) => [
+      nodeId,
+      [...nodeMap.entries()].map(([inKey, outSet]) => [inKey, [...outSet]]),
+    ]),
+    signals: [...state.signals.entries()].map(([nodeId, sig]) => [nodeId, {
+      nodeId: sig.nodeId,
+      phases: sig.phases.map(p => ({
+        duration: p.duration,
+        greenConnectors: [...p.greenConnectors],
+      })),
+      currentPhase: sig.currentPhase,
+      phaseTimer: sig.phaseTimer,
+    }]),
+  };
+  localStorage.setItem(KEY, JSON.stringify(data));
+  lastSaveAt = Date.now();
+}
 
 export function saveState() {
   try {
-    const data = {
-      nextNodeId: state.nextNodeId,
-      nextSegmentId: state.nextSegmentId,
-      nextConnectorId: state.nextConnectorId,
-      nodes: [...state.nodes.entries()],
-      segments: [...state.segments.entries()],
-      laneArrows: [...state.laneArrows.entries()].map(([k, v]) => [k, [...v]]),
-      userConnectors: [...state.userConnectors.entries()].map(([nodeId, nodeMap]) => [
-        nodeId,
-        [...nodeMap.entries()].map(([inKey, outSet]) => [inKey, [...outSet]]),
-      ]),
-      signals: [...state.signals.entries()].map(([nodeId, sig]) => [nodeId, {
-        nodeId: sig.nodeId,
-        phases: sig.phases.map(p => ({
-          duration: p.duration,
-          greenConnectors: [...p.greenConnectors],
-        })),
-        currentPhase: sig.currentPhase,
-        phaseTimer: sig.phaseTimer,
-      }]),
-    };
-    localStorage.setItem(KEY, JSON.stringify(data));
+    const now = Date.now();
+    const wait = SAVE_MIN_INTERVAL_MS - (now - lastSaveAt);
+    if (wait <= 0 && !saveTimer) {
+      writeStateSnapshot();
+      return;
+    }
+    if (saveTimer) return;
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      try {
+        writeStateSnapshot();
+      } catch (e) {
+        console.warn("saveState failed:", e);
+      }
+    }, Math.max(0, wait));
   } catch (e) {
     console.warn("saveState failed:", e);
   }
