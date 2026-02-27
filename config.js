@@ -16,6 +16,9 @@ export const COLOR_CENTERLINE = 0xe8c840; // yellow dashes between directions
 export const CENTERLINE_WIDTH = 2;   // centerline stroke width (world px)
 export const CENTERLINE_DASH  = 16;  // centerline dash length (world px)
 export const CENTERLINE_GAP   = 8;   // centerline gap length (world px)
+export const STOP_LINE_WIDTH  = 4;   // stop-line stroke width (screen px baseline)
+export const STOP_LINE_COLOR  = 0xe2e2e2;
+export const STOP_LINE_ALPHA  = 1;
 
 // ── Nodes ─────────────────────────────────────────────────────────────────────
 export const NODE_RADIUS          = 7;   // default node handle radius (world px)
@@ -27,7 +30,7 @@ export const STRAIGHT_THRESHOLD    = Math.PI / 6; // turn < 30° → classified 
 export const CONNECTOR_BEZIER_STEPS   = 12;      // curve smoothness (segments per bezier)
 export const CONNECTOR_BEZIER_FACTOR  = 0.4;     // control-point pull factor (0–1)
 export const CONNECTOR_BEZIER_MIN     = 10;      // minimum handle length (px)
-export const CONNECTOR_PATH_WIDTH     = 6;       // world px width of connector path markings
+export const CONNECTOR_PATH_WIDTH     = 5;       // world px width of connector path markings
 export const CONNECTOR_PATH_COLOR     = 0x555555; // color of connector path markings
 export const CONNECTOR_PATH_ALPHA     = 0.5;    // opacity of connector path markings
 

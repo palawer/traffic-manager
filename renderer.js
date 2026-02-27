@@ -2,7 +2,7 @@ import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
 import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   CONNECTOR_PATH_WIDTH, CONNECTOR_PATH_COLOR, CONNECTOR_PATH_ALPHA,
   DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH, DEBUG_PATH_CONNECTOR_WIDTH,
-  CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP,
+  CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP, STOP_LINE_WIDTH, STOP_LINE_ALPHA,
   NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS,
   SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
@@ -117,12 +117,12 @@ export function drawGrid() {
   for (let x = Math.floor(min.x / GRID) * GRID; x <= max.x; x += GRID) {
     const majorLine = Math.abs(x % major) < 0.001;
     gridGraphics.moveTo(x, min.y).lineTo(x, max.y);
-    gridGraphics.stroke({ width: 1 / state.view.zoom, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
+    gridGraphics.stroke({ width: 1, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
   }
   for (let y = Math.floor(min.y / GRID) * GRID; y <= max.y; y += GRID) {
     const majorLine = Math.abs(y % major) < 0.001;
     gridGraphics.moveTo(min.x, y).lineTo(max.x, y);
-    gridGraphics.stroke({ width: 1 / state.view.zoom, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
+    gridGraphics.stroke({ width: 1, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
   }
 }
 
@@ -207,22 +207,18 @@ export function drawRoads() {
   debugTrajectoriesGraphics.clear();
   junctionGraphics.clear();
 
-  const lw = 1.5 / state.view.zoom;
+  const lw = 1.5;
+  const pendingStopLines = [];
 
   // Draw junctions
   for (const [nodeId, junc] of state.junctions) {
-    const segsAtNode = getNodeSegments(nodeId);
-
-    if (segsAtNode.length === 2) {
-      // Two-road bend: stroke the road-centre bezier with full road width
-      drawBendJunction(junctionGraphics, nodeId, segsAtNode);
-    } else if (junc.polygon && junc.polygon.length >= 3) {
-      // Three+ roads: filled convex polygon
+    if (junc.polygon && junc.polygon.length >= 3) {
+      // Use the computed junction outline for both bends and intersections.
+      // This keeps both sides consistent and follows connector geometry.
       const flat = junc.polygon.flatMap(p => [p.x, p.y]);
       junctionGraphics.poly(flat);
       junctionGraphics.fill(COLORS.junction);
     }
-
   }
 
   // Draw segment bodies
@@ -278,9 +274,9 @@ export function drawRoads() {
       drawDashedLine(laneMarkingsGraphics, { x: ax, y: ay }, { x: bx, y: by }, 0, lw, COLORS.laneDivider, 12, 10);
     }
 
-    // Stop lines at each end
-    drawStopLine(laneMarkingsGraphics, pA, nx, ny, halfW, lw * 2);
-    drawStopLine(laneMarkingsGraphics, pB, nx, ny, halfW, lw * 2);
+    // Stop lines are drawn after connector trajectories so they stay on top.
+    pendingStopLines.push({ pt: pA, nx, ny, halfW, lw: STOP_LINE_WIDTH });
+    pendingStopLines.push({ pt: pB, nx, ny, halfW, lw: STOP_LINE_WIDTH });
   }
 
   // Draw connector paths (always visible as road markings)
@@ -292,6 +288,11 @@ export function drawRoads() {
       for (let i = 1; i < pts.length; i++) laneMarkingsGraphics.lineTo(pts[i].x, pts[i].y);
       laneMarkingsGraphics.stroke({ width: CONNECTOR_PATH_WIDTH, color: CONNECTOR_PATH_COLOR, alpha: CONNECTOR_PATH_ALPHA });
     }
+  }
+
+  // Draw stop lines above intersection trajectories.
+  for (const s of pendingStopLines) {
+    drawStopLine(laneMarkingsGraphics, s.pt, s.nx, s.ny, s.halfW, s.lw);
   }
 
   if (state.debugLanes) {
@@ -309,7 +310,6 @@ export function drawRoads() {
           width: lineW,
           color: COLORS.debugLane,
           alpha: DEBUG_PATH_ALPHA,
-          pixelLine: true,
         });
       }
       for (let lane = 0; lane < seg.lanesBtoA; lane++) {
@@ -321,7 +321,6 @@ export function drawRoads() {
           width: lineW,
           color: COLORS.debugLane,
           alpha: DEBUG_PATH_ALPHA,
-          pixelLine: true,
         });
       }
     }
@@ -337,7 +336,6 @@ export function drawRoads() {
           width: connectorW,
           color: COLORS.debugLane,
           alpha: DEBUG_PATH_ALPHA,
-          pixelLine: true,
         });
       }
     }
@@ -350,7 +348,7 @@ export function drawRoads() {
 function drawStopLine(g, pt, nx, ny, halfW, lw) {
   g.moveTo(pt.x - nx * halfW, pt.y - ny * halfW);
   g.lineTo(pt.x + nx * halfW, pt.y + ny * halfW);
-  g.stroke({ width: lw, color: COLORS.stopLine, alpha: 0.7 });
+  g.stroke({ width: lw, color: COLORS.stopLine, alpha: STOP_LINE_ALPHA });
 }
 
 function drawDashedLine(g, pA, pB, offset, lw, color, dashLen, gapLen) {
@@ -399,8 +397,8 @@ export function drawPreview() {
 
   // Show snap circle at destination
   if (state.drawingSegment.snapNodeId) {
-    previewGraphics.circle(to.x, to.y, 8 / state.view.zoom);
-    previewGraphics.stroke({ width: 2 / state.view.zoom, color: COLORS.nodeSelected });
+    previewGraphics.circle(to.x, to.y, 8);
+    previewGraphics.stroke({ width: 2, color: COLORS.nodeSelected });
   }
 }
 
@@ -411,8 +409,8 @@ export function drawSelectedCarRoute() {
   if (!car) { state.selectedCarId = null; return; }
 
   const color = car.color;
-  const glow = 8 / state.view.zoom;
-  const thin = 3 / state.view.zoom;
+  const glow = 8;
+  const thin = 3;
 
   function strokePolyline(path, fromS = 0) {
     if (!path || path.points.length < 2) return;
@@ -478,8 +476,7 @@ export function drawSelectedCarRoute() {
   if (car.route && car.route.length > 0) {
     const destNode = state.nodes.get(car.route[car.route.length - 1]);
     if (destNode) {
-      const z = state.view.zoom;
-      const pinR  = 10 / z;
+      const pinR  = 10;
       const tipY  = destNode.y + pinR * 1.6;  // tip of the teardrop
 
       // Shadow
@@ -498,7 +495,7 @@ export function drawSelectedCarRoute() {
 
       // White border
       routeGraphics.circle(destNode.x, destNode.y - pinR, pinR);
-      routeGraphics.stroke({ width: 2 / z, color: 0xffffff, alpha: 0.9 });
+      routeGraphics.stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
 
       // White inner dot
       routeGraphics.circle(destNode.x, destNode.y - pinR, pinR * 0.35);
@@ -523,8 +520,8 @@ export function drawCars() {
 
     // Selection glow ring (drawn first, behind the car body)
     if (selected) {
-      carsGraphics.circle(p.x, p.y, 10 / state.view.zoom);
-      carsGraphics.stroke({ width: 2.5 / state.view.zoom, color: 0xffffff, alpha: 0.95 });
+      carsGraphics.circle(p.x, p.y, 10);
+      carsGraphics.stroke({ width: 2.5, color: 0xffffff, alpha: 0.95 });
     }
 
     const c = Math.cos(h), s = Math.sin(h);
@@ -535,7 +532,7 @@ export function drawCars() {
 
     carsGraphics.poly([pts[0].x, pts[0].y, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
     carsGraphics.fill(car.color);
-    carsGraphics.stroke({ width: selected ? 2 / state.view.zoom : 1.5 / state.view.zoom, color: selected ? 0xffffff : COLORS.carStroke });
+    carsGraphics.stroke({ width: selected ? 2 : 1.5, color: selected ? 0xffffff : COLORS.carStroke });
   }
 }
 
@@ -893,7 +890,7 @@ export function drawConnectorTool() {
       if (!node) continue;
       const hovered = state.hoveredNodeId === nodeId;
       connectorOverlayGraphics.circle(node.x, node.y, 18);
-      connectorOverlayGraphics.stroke({ color: hovered ? 0xffd700 : 0x88bbdd, width: 2 / state.view.zoom, alpha: 0.7 });
+      connectorOverlayGraphics.stroke({ color: hovered ? 0xffd700 : 0x88bbdd, width: 2, alpha: 0.7 });
     }
     return;
   }
