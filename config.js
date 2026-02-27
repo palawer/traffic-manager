@@ -110,7 +110,7 @@ export const SIGNAL_TOOL_RING_ALPHA = 0.85;
 export const SPEED_LABEL_TEXT_COLOR = 0x111111;
 export const SPEED_LABEL_BG_COLOR = 0xffffff;
 export const SPEED_LABEL_ALPHA_ACTIVE = 1.0;
-export const SPEED_LABEL_ALPHA_IDLE = 0.8;
+export const SPEED_LABEL_ALPHA_IDLE = 1.0;
 export const CONNECTOR_NODE_RING_RADIUS = 18;
 export const CONNECTOR_NODE_RING_WIDTH = 2;
 export const CONNECTOR_NODE_RING_ALPHA = 0.7;
@@ -182,10 +182,13 @@ export const ZOOM_MAX         = 8.0;
 export const DEFAULT_SPEED_LIMIT  = 80;
 export const SPEED_PRESETS        = [30, 50, 80, 120]; // cycling order
 export const MAX_LANES            = 4;   // max lanes per direction in the property panel
-export const SPEED_SIGN_RADIUS       = 8;        // world px radius of speed sign circle
+export const SPEED_SIGN_RADIUS       = 10;        // world px radius of speed sign circle
 export const SPEED_SIGN_FONT_SIZE    = 8;        // font size of speed number (world px)
+export const SPEED_SIGN_TEXT_RESOLUTION = 6;     // higher = sharper text when zooming in
 export const SPEED_SIGN_BORDER_COLOR = 0xcc0000; // border color of speed sign
-export const SPEED_SIGN_BORDER_SIZE  = 2.5;      // border stroke width (world px)
+export const SPEED_SIGN_BORDER_SIZE  = 2;      // border stroke width (world px)
+export const SPEED_SIGN_BORDER_ALPHA = 1.0;
+export const SPEED_SIGN_BG_ALPHA     = 1.0;
 
 // ── Collisions & explosions ────────────────────────────────────────────────────
 export const CRASH_DIST          = 12;   // px — cars closer than this collide

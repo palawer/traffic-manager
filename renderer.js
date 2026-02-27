@@ -18,7 +18,7 @@ import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   CONNECTOR_OUT_R, CONNECTOR_OUT_TARGET_R, CONNECTOR_OUT_EXTRA_R, CONNECTOR_OUT_STROKE, CONNECTOR_OUT_STROKE_COLOR,
   CONNECTOR_TARGET_FILL_ALPHA, CONNECTOR_OUT_IDLE_ALPHA, CONNECTOR_IN_R, CONNECTOR_IN_SELECTED_R, CONNECTOR_IN_SELECTED_EXTRA_R, CONNECTOR_SELECTED_HALO_COLOR, CONNECTOR_SELECTED_HALO_WIDTH, CONNECTOR_IN_SELECTED_FILL_COLOR,
   NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS,
-  SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE } from "./config.js";
+  SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_TEXT_RESOLUTION, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE, SPEED_SIGN_BORDER_ALPHA, SPEED_SIGN_BG_ALPHA } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
@@ -883,6 +883,7 @@ export function drawSpeedLabels() {
         text: "",
         style: { fontSize: SPEED_SIGN_FONT_SIZE, fill: SPEED_LABEL_TEXT_COLOR, fontWeight: "bold" },
       });
+      txt.resolution = SPEED_SIGN_TEXT_RESOLUTION;
       txt.label = "lbl";
       txt.anchor.set(0.5, 0.5);
       sign.addChild(txt);
@@ -896,9 +897,11 @@ export function drawSpeedLabels() {
 
       const bg = sign.getChildByLabel("bg");
       bg.clear();
+      // Draw as a solid ring (outer red + inner white) to avoid AA double-border artifacts.
       bg.circle(0, 0, SPEED_SIGN_RADIUS);
-      bg.fill(SPEED_LABEL_BG_COLOR);
-      bg.stroke({ width: SPEED_SIGN_BORDER_SIZE, color: SPEED_SIGN_BORDER_COLOR });
+      bg.fill({ color: SPEED_SIGN_BORDER_COLOR, alpha: SPEED_SIGN_BORDER_ALPHA });
+      bg.circle(0, 0, Math.max(0, SPEED_SIGN_RADIUS - SPEED_SIGN_BORDER_SIZE));
+      bg.fill({ color: SPEED_LABEL_BG_COLOR, alpha: SPEED_SIGN_BG_ALPHA });
 
       sign.getChildByLabel("lbl").text = String(seg.speedLimit);
     }
