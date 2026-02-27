@@ -414,14 +414,35 @@ export function drawSelectedCarRoute() {
     }
   }
 
-  // 4. Destination marker
+  // 4. Destination pin
   if (car.route && car.route.length > 0) {
     const destNode = state.nodes.get(car.route[car.route.length - 1]);
     if (destNode) {
-      const r = 10 / state.view.zoom;
-      routeGraphics.circle(destNode.x, destNode.y, r);
-      routeGraphics.fill({ color, alpha: 0.25 });
-      routeGraphics.stroke({ width: 2.5 / state.view.zoom, color, alpha: 0.9 });
+      const z = state.view.zoom;
+      const pinR  = 10 / z;
+      const tipY  = destNode.y + pinR * 1.6;  // tip of the teardrop
+
+      // Shadow
+      routeGraphics.circle(destNode.x, destNode.y - pinR * 0.1, pinR * 1.1);
+      routeGraphics.fill({ color: 0x000000, alpha: 0.18 });
+
+      // Teardrop body (circle + downward triangle)
+      routeGraphics.circle(destNode.x, destNode.y - pinR, pinR);
+      routeGraphics.fill({ color, alpha: 0.95 });
+      routeGraphics.poly([
+        destNode.x, tipY,
+        destNode.x - pinR * 0.65, destNode.y - pinR * 0.3,
+        destNode.x + pinR * 0.65, destNode.y - pinR * 0.3,
+      ]);
+      routeGraphics.fill({ color, alpha: 0.95 });
+
+      // White border
+      routeGraphics.circle(destNode.x, destNode.y - pinR, pinR);
+      routeGraphics.stroke({ width: 2 / z, color: 0xffffff, alpha: 0.9 });
+
+      // White inner dot
+      routeGraphics.circle(destNode.x, destNode.y - pinR, pinR * 0.35);
+      routeGraphics.fill({ color: 0xffffff, alpha: 0.95 });
     }
   }
 }
@@ -438,6 +459,14 @@ export function drawCars() {
       h = headingAtPath(car.path, car.s);
     }
 
+    const selected = car.id === state.selectedCarId;
+
+    // Selection glow ring (drawn first, behind the car body)
+    if (selected) {
+      carsGraphics.circle(p.x, p.y, 10 / state.view.zoom);
+      carsGraphics.stroke({ width: 2.5 / state.view.zoom, color: 0xffffff, alpha: 0.95 });
+    }
+
     const c = Math.cos(h), s = Math.sin(h);
     const pts = [
       { x: -6, y: -3.5 }, { x: 6, y: -3.5 },
@@ -446,7 +475,7 @@ export function drawCars() {
 
     carsGraphics.poly([pts[0].x, pts[0].y, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
     carsGraphics.fill(car.color);
-    carsGraphics.stroke({ width: 1.5 / state.view.zoom, color: COLORS.carStroke });
+    carsGraphics.stroke({ width: selected ? 2 / state.view.zoom : 1.5 / state.view.zoom, color: selected ? 0xffffff : COLORS.carStroke });
   }
 }
 
