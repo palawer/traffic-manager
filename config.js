@@ -84,6 +84,7 @@ export const ROUTE_PIN_BORDER_ALPHA = 0.9;
 export const ROUTE_PIN_DOT_ALPHA = 0.95;
 export const CAR_BODY_HALF_LENGTH = 6;
 export const CAR_BODY_HALF_WIDTH = 3.5;
+export const CAR_CORNER_RADIUS = 1.8;
 export const CAR_SELECTION_RADIUS = 10;
 export const CAR_SELECTION_STROKE = 2.5;
 export const CAR_SELECTION_ALPHA = 0.95;

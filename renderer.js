@@ -8,7 +8,7 @@ import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   PREVIEW_INVALID_COLOR, PREVIEW_ALPHA, PREVIEW_SNAP_RADIUS, PREVIEW_SNAP_STROKE,
   ROUTE_GLOW_WIDTH, ROUTE_LINE_WIDTH, ROUTE_GLOW_ALPHA, ROUTE_LINE_ALPHA,
   ROUTE_PIN_RADIUS, ROUTE_PIN_SHADOW_ALPHA, ROUTE_PIN_FILL_ALPHA, ROUTE_PIN_BORDER_WIDTH, ROUTE_PIN_BORDER_ALPHA, ROUTE_PIN_DOT_ALPHA,
-  CAR_BODY_HALF_LENGTH, CAR_BODY_HALF_WIDTH, CAR_SELECTION_RADIUS, CAR_SELECTION_STROKE, CAR_SELECTION_ALPHA, CAR_STROKE_WIDTH, CAR_STROKE_SELECTED_WIDTH,
+  CAR_BODY_HALF_LENGTH, CAR_BODY_HALF_WIDTH, CAR_CORNER_RADIUS, CAR_SELECTION_RADIUS, CAR_SELECTION_STROKE, CAR_SELECTION_ALPHA, CAR_STROKE_WIDTH, CAR_STROKE_SELECTED_WIDTH,
   EXPLOSION_RING_COLOR_START, EXPLOSION_RING_COLOR_END, EXPLOSION_SPARK_COLOR, EXPLOSION_SPARK_WIDTH,
   ARROW_GROUP_OFFSET, ARROW_TURN_ANGLE_DIVISOR, ARROW_HEAD_LENGTH, ARROW_HEAD_WIDTH, ARROW_FILL_COLOR, ARROW_FILL_ALPHA, ARROW_HOVER_ALPHA,
   SIGNAL_STROKE_WIDTH, SIGNAL_STROKE_COLOR, SIGNAL_STROKE_ALPHA, SIGNAL_TOOL_RING_RADIUS, SIGNAL_TOOL_RING_WIDTH, SIGNAL_TOOL_RING_COLOR, SIGNAL_TOOL_RING_ALPHA,
@@ -570,21 +570,51 @@ export function drawCars() {
       carsGraphics.stroke({ width: CAR_SELECTION_STROKE, color: SPEED_LABEL_BG_COLOR, alpha: CAR_SELECTION_ALPHA });
     }
 
-    const c = Math.cos(h), s = Math.sin(h);
-    const pts = [
-      { x: -CAR_BODY_HALF_LENGTH, y: -CAR_BODY_HALF_WIDTH },
-      { x: CAR_BODY_HALF_LENGTH, y: -CAR_BODY_HALF_WIDTH },
-      { x: CAR_BODY_HALF_LENGTH, y: CAR_BODY_HALF_WIDTH },
-      { x: -CAR_BODY_HALF_LENGTH, y: CAR_BODY_HALF_WIDTH },
-    ].map(q => ({ x: p.x + q.x * c - q.y * s, y: p.y + q.x * s + q.y * c }));
-
-    carsGraphics.poly([pts[0].x, pts[0].y, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
+    const bodyPts = buildRoundedCarBodyPoints(
+      p.x,
+      p.y,
+      h,
+      CAR_BODY_HALF_LENGTH,
+      CAR_BODY_HALF_WIDTH,
+      CAR_CORNER_RADIUS
+    );
+    carsGraphics.poly(bodyPts);
     carsGraphics.fill(car.color);
     carsGraphics.stroke({
       width: selected ? CAR_STROKE_SELECTED_WIDTH : CAR_STROKE_WIDTH,
       color: selected ? SPEED_LABEL_BG_COLOR : COLORS.carStroke,
     });
   }
+}
+
+function buildRoundedCarBodyPoints(cx, cy, heading, halfL, halfW, radius) {
+  const r = Math.max(0, Math.min(radius, halfL, halfW));
+  const innerL = halfL - r;
+  const innerW = halfW - r;
+  const cornerSteps = 3;
+  const local = [];
+
+  function addArc(centerX, centerY, a0, a1) {
+    for (let i = 0; i <= cornerSteps; i++) {
+      const t = i / cornerSteps;
+      const a = a0 + (a1 - a0) * t;
+      local.push({ x: centerX + Math.cos(a) * r, y: centerY + Math.sin(a) * r });
+    }
+  }
+
+  // Clockwise local arcs: top-right, bottom-right, bottom-left, top-left
+  addArc(innerL, -innerW, -Math.PI / 2, 0);
+  addArc(innerL, innerW, 0, Math.PI / 2);
+  addArc(-innerL, innerW, Math.PI / 2, Math.PI);
+  addArc(-innerL, -innerW, Math.PI, (3 * Math.PI) / 2);
+
+  const c = Math.cos(heading);
+  const s = Math.sin(heading);
+  const world = [];
+  for (const q of local) {
+    world.push(cx + q.x * c - q.y * s, cy + q.x * s + q.y * c);
+  }
+  return world;
 }
 
 export function drawExplosions(dt) {
