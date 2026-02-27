@@ -16,6 +16,7 @@ let gridGraphics = null;
 let junctionGraphics = null;
 let roadsGraphics = null;
 let laneMarkingsGraphics = null;
+let debugTrajectoriesGraphics = null;
 let tmpeOverlayGraphics = null;
 let connectorOverlayGraphics = null;
 let routeGraphics = null;
@@ -44,6 +45,7 @@ export async function initRenderer() {
   junctionGraphics   = new PIXI.Graphics();
   roadsGraphics      = new PIXI.Graphics();
   laneMarkingsGraphics = new PIXI.Graphics();
+  debugTrajectoriesGraphics = new PIXI.Graphics();
   tmpeOverlayGraphics  = new PIXI.Graphics();
   connectorOverlayGraphics = new PIXI.Graphics();
   routeGraphics        = new PIXI.Graphics();
@@ -59,6 +61,7 @@ export async function initRenderer() {
   camera.addChild(junctionGraphics);
   camera.addChild(roadsGraphics);
   camera.addChild(laneMarkingsGraphics);
+  camera.addChild(debugTrajectoriesGraphics);
   camera.addChild(speedLabelsContainer);
   camera.addChild(tmpeOverlayGraphics);
   camera.addChild(connectorOverlayGraphics);
@@ -200,6 +203,7 @@ export function drawRoads() {
 
   roadsGraphics.clear();
   laneMarkingsGraphics.clear();
+  debugTrajectoriesGraphics.clear();
   junctionGraphics.clear();
 
   const lw = 1.5 / state.view.zoom;
@@ -286,6 +290,40 @@ export function drawRoads() {
       laneMarkingsGraphics.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) laneMarkingsGraphics.lineTo(pts[i].x, pts[i].y);
       laneMarkingsGraphics.stroke({ width: CONNECTOR_PATH_WIDTH, color: CONNECTOR_PATH_COLOR, alpha: CONNECTOR_PATH_ALPHA });
+    }
+  }
+
+  if (state.debugLanes) {
+    const lineW = 2.2 / state.view.zoom;
+    const connectorW = 2.6 / state.view.zoom;
+
+    // 1) Segment lane centerlines: exactly where cars run on segments.
+    for (const seg of state.segments.values()) {
+      for (let lane = 0; lane < seg.lanesAtoB; lane++) {
+        const path = buildLanePath(seg, state.nodes, "AtoB", lane);
+        if (!path || path.points.length < 2) continue;
+        debugTrajectoriesGraphics.moveTo(path.points[0].x, path.points[0].y);
+        for (let i = 1; i < path.points.length; i++) debugTrajectoriesGraphics.lineTo(path.points[i].x, path.points[i].y);
+        debugTrajectoriesGraphics.stroke({ width: lineW, color: COLORS.debugLane, alpha: 0.98 });
+      }
+      for (let lane = 0; lane < seg.lanesBtoA; lane++) {
+        const path = buildLanePath(seg, state.nodes, "BtoA", lane);
+        if (!path || path.points.length < 2) continue;
+        debugTrajectoriesGraphics.moveTo(path.points[0].x, path.points[0].y);
+        for (let i = 1; i < path.points.length; i++) debugTrajectoriesGraphics.lineTo(path.points[i].x, path.points[i].y);
+        debugTrajectoriesGraphics.stroke({ width: lineW, color: COLORS.debugLane, alpha: 0.98 });
+      }
+    }
+
+    // 2) Junction connectors: all real intersection trajectories.
+    for (const [, junc] of state.junctions) {
+      for (const conn of junc.connectors) {
+        const pts = conn.path.points;
+        if (!pts || pts.length < 2) continue;
+        debugTrajectoriesGraphics.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) debugTrajectoriesGraphics.lineTo(pts[i].x, pts[i].y);
+        debugTrajectoriesGraphics.stroke({ width: connectorW, color: COLORS.debugLane, alpha: 1 });
+      }
     }
   }
 

@@ -21,7 +21,7 @@ export const COLORS = {
   trafficRed: 0xff453a,
   trafficPole: 0x1f252b,
   carStroke: 0x172028,
-  debugLane: 0x0a84ff,
+  debugLane: 0x00b7ff,
   connectorPath: 0x00ccff,
   arrowGreen: 0x35c759,
   previewRoad: 0x5a9fd4,

@@ -28,8 +28,8 @@ export const CONNECTOR_BEZIER_STEPS   = 12;      // curve smoothness (segments p
 export const CONNECTOR_BEZIER_FACTOR  = 0.4;     // control-point pull factor (0–1)
 export const CONNECTOR_BEZIER_MIN     = 10;      // minimum handle length (px)
 export const CONNECTOR_PATH_WIDTH     = 6;       // world px width of connector path markings
-export const CONNECTOR_PATH_COLOR     = 0xffffff; // color of connector path markings
-export const CONNECTOR_PATH_ALPHA     = 0.05;    // opacity of connector path markings
+export const CONNECTOR_PATH_COLOR     = 0x555555; // color of connector path markings
+export const CONNECTOR_PATH_ALPHA     = 0.5;    // opacity of connector path markings
 
 // ── Traffic signals ───────────────────────────────────────────────────────────
 export const SIGNAL_PHASE_DURATION = 5;   // seconds each phase stays green
