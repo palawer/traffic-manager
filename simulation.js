@@ -348,12 +348,14 @@ function advanceRouteStep(car) {
 
 function advanceRouteStepIfMatches(car, segId, dir, laneIdx) {
   if (!car.laneSeq) return;
-  const nextStep = car.routeStep + 1;
-  if (nextStep < car.laneSeq.length) {
-    const step = car.laneSeq[nextStep];
-    if (step.segId === segId && step.dir === dir && step.laneIdx === laneIdx) {
-      car.routeStep = nextStep;
-    }
+  const nextStepIdx = car.routeStep + 1;
+  if (nextStepIdx >= car.laneSeq.length) return;
+  const step = car.laneSeq[nextStepIdx];
+  // Match on segId + dir only: the connector may have chosen a different lane
+  // than routeToLaneSequence planned. Sync laneIdx to the real connector output.
+  if (step.segId === segId && step.dir === dir) {
+    step.laneIdx = laneIdx;
+    car.routeStep = nextStepIdx;
   }
 }
 
