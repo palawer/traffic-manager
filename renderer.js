@@ -3,6 +3,20 @@ import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   CONNECTOR_PATH_WIDTH, CONNECTOR_PATH_COLOR, CONNECTOR_PATH_ALPHA,
   DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH, DEBUG_PATH_CONNECTOR_WIDTH,
   CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP, LANE_DIVIDER_WIDTH, STOP_LINE_WIDTH, STOP_LINE_ALPHA,
+  GRID_LINE_WIDTH, ROAD_HOVER_STROKE_EXTRA, ROAD_HOVER_ALPHA, LANE_DIVIDER_DASH, LANE_DIVIDER_GAP,
+  NODE_STROKE_WIDTH, NODE_STROKE_COLOR, NODE_STROKE_ALPHA,
+  PREVIEW_INVALID_COLOR, PREVIEW_ALPHA, PREVIEW_SNAP_RADIUS, PREVIEW_SNAP_STROKE,
+  ROUTE_GLOW_WIDTH, ROUTE_LINE_WIDTH, ROUTE_GLOW_ALPHA, ROUTE_LINE_ALPHA,
+  ROUTE_PIN_RADIUS, ROUTE_PIN_SHADOW_ALPHA, ROUTE_PIN_FILL_ALPHA, ROUTE_PIN_BORDER_WIDTH, ROUTE_PIN_BORDER_ALPHA, ROUTE_PIN_DOT_ALPHA,
+  CAR_BODY_HALF_LENGTH, CAR_BODY_HALF_WIDTH, CAR_SELECTION_RADIUS, CAR_SELECTION_STROKE, CAR_SELECTION_ALPHA, CAR_STROKE_WIDTH, CAR_STROKE_SELECTED_WIDTH,
+  EXPLOSION_RING_COLOR_START, EXPLOSION_RING_COLOR_END, EXPLOSION_SPARK_COLOR, EXPLOSION_SPARK_WIDTH,
+  ARROW_GROUP_OFFSET, ARROW_TURN_ANGLE_DIVISOR, ARROW_HEAD_LENGTH, ARROW_HEAD_WIDTH, ARROW_FILL_COLOR, ARROW_FILL_ALPHA, ARROW_HOVER_ALPHA,
+  SIGNAL_STROKE_WIDTH, SIGNAL_STROKE_COLOR, SIGNAL_STROKE_ALPHA, SIGNAL_TOOL_RING_RADIUS, SIGNAL_TOOL_RING_WIDTH, SIGNAL_TOOL_RING_COLOR, SIGNAL_TOOL_RING_ALPHA,
+  SPEED_LABEL_TEXT_COLOR, SPEED_LABEL_BG_COLOR, SPEED_LABEL_ALPHA_ACTIVE, SPEED_LABEL_ALPHA_IDLE,
+  CONNECTOR_NODE_RING_RADIUS, CONNECTOR_NODE_RING_WIDTH, CONNECTOR_NODE_RING_ALPHA, CONNECTOR_NODE_RING_COLOR, CONNECTOR_NODE_RING_HOVER_COLOR,
+  CONNECTOR_DEFAULT_COLOR, CONNECTOR_USER_ALPHA, CONNECTOR_DIM_ALPHA, CONNECTOR_WIDTH, CONNECTOR_WIDTH_SELECTED,
+  CONNECTOR_OUT_R, CONNECTOR_OUT_TARGET_R, CONNECTOR_OUT_EXTRA_R, CONNECTOR_OUT_STROKE, CONNECTOR_OUT_STROKE_COLOR,
+  CONNECTOR_TARGET_FILL_ALPHA, CONNECTOR_OUT_IDLE_ALPHA, CONNECTOR_IN_R, CONNECTOR_IN_SELECTED_R, CONNECTOR_IN_SELECTED_EXTRA_R, CONNECTOR_SELECTED_HALO_COLOR, CONNECTOR_SELECTED_HALO_WIDTH, CONNECTOR_IN_SELECTED_FILL_COLOR,
   NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS,
   SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
@@ -117,12 +131,12 @@ export function drawGrid() {
   for (let x = Math.floor(min.x / GRID) * GRID; x <= max.x; x += GRID) {
     const majorLine = Math.abs(x % major) < 0.001;
     gridGraphics.moveTo(x, min.y).lineTo(x, max.y);
-    gridGraphics.stroke({ width: 1, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
+    gridGraphics.stroke({ width: GRID_LINE_WIDTH, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
   }
   for (let y = Math.floor(min.y / GRID) * GRID; y <= max.y; y += GRID) {
     const majorLine = Math.abs(y % major) < 0.001;
     gridGraphics.moveTo(min.x, y).lineTo(max.x, y);
-    gridGraphics.stroke({ width: 1, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
+    gridGraphics.stroke({ width: GRID_LINE_WIDTH, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
   }
 }
 
@@ -238,7 +252,7 @@ export function drawRoads() {
       const hip = segmentInsetPoints(hSeg);
       if (hip) {
         roadsGraphics.moveTo(hip.pA.x, hip.pA.y).lineTo(hip.pB.x, hip.pB.y);
-        roadsGraphics.stroke({ width: hip.totalWidth + 6, color: 0xffffff, alpha: 0.25, cap: "butt" });
+        roadsGraphics.stroke({ width: hip.totalWidth + ROAD_HOVER_STROKE_EXTRA, color: SPEED_LABEL_BG_COLOR, alpha: ROAD_HOVER_ALPHA, cap: "butt" });
       }
     }
   }
@@ -263,7 +277,16 @@ export function drawRoads() {
       const off = i * LANE_WIDTH;
       const ax = pA.x + nx * off, ay = pA.y + ny * off;
       const bx = pB.x + nx * off, by = pB.y + ny * off;
-      drawDashedLine(laneMarkingsGraphics, { x: ax, y: ay }, { x: bx, y: by }, 0, lw, COLORS.laneDivider, 12, 10);
+      drawDashedLine(
+        laneMarkingsGraphics,
+        { x: ax, y: ay },
+        { x: bx, y: by },
+        0,
+        lw,
+        COLORS.laneDivider,
+        LANE_DIVIDER_DASH,
+        LANE_DIVIDER_GAP
+      );
     }
 
     // Inner lane dividers (BtoA side)
@@ -271,7 +294,16 @@ export function drawRoads() {
       const off = -i * LANE_WIDTH;
       const ax = pA.x + nx * off, ay = pA.y + ny * off;
       const bx = pB.x + nx * off, by = pB.y + ny * off;
-      drawDashedLine(laneMarkingsGraphics, { x: ax, y: ay }, { x: bx, y: by }, 0, lw, COLORS.laneDivider, 12, 10);
+      drawDashedLine(
+        laneMarkingsGraphics,
+        { x: ax, y: ay },
+        { x: bx, y: by },
+        0,
+        lw,
+        COLORS.laneDivider,
+        LANE_DIVIDER_DASH,
+        LANE_DIVIDER_GAP
+      );
     }
 
     // Stop lines are drawn after connector trajectories so they stay on top.
@@ -376,7 +408,7 @@ function drawNodes() {
     const radius = isSelected ? NODE_RADIUS_SELECTED : NODE_RADIUS;
     nodeGraphics.circle(node.x, node.y, radius);
     nodeGraphics.fill(color);
-    nodeGraphics.stroke({ width: 1.5, color: 0x000000, alpha: 0.4 });
+    nodeGraphics.stroke({ width: NODE_STROKE_WIDTH, color: NODE_STROKE_COLOR, alpha: NODE_STROKE_ALPHA });
   }
 }
 
@@ -393,12 +425,17 @@ export function drawPreview() {
   const totalWidth = 2 * LANE_WIDTH; // default 1+1
   const invalid = !!state.drawingSegment.invalid;
   previewGraphics.moveTo(fromNode.x, fromNode.y).lineTo(to.x, to.y);
-  previewGraphics.stroke({ width: totalWidth, color: invalid ? 0xdd3333 : COLORS.previewRoad, alpha: 0.55, cap: "round" });
+  previewGraphics.stroke({
+    width: totalWidth,
+    color: invalid ? PREVIEW_INVALID_COLOR : COLORS.previewRoad,
+    alpha: PREVIEW_ALPHA,
+    cap: "round",
+  });
 
   // Show snap circle at destination
   if (state.drawingSegment.snapNodeId) {
-    previewGraphics.circle(to.x, to.y, 8);
-    previewGraphics.stroke({ width: 2, color: COLORS.nodeSelected });
+    previewGraphics.circle(to.x, to.y, PREVIEW_SNAP_RADIUS);
+    previewGraphics.stroke({ width: PREVIEW_SNAP_STROKE, color: COLORS.nodeSelected });
   }
 }
 
@@ -409,8 +446,8 @@ export function drawSelectedCarRoute() {
   if (!car) { state.selectedCarId = null; return; }
 
   const color = car.color;
-  const glow = 8;
-  const thin = 3;
+  const glow = ROUTE_GLOW_WIDTH;
+  const thin = ROUTE_LINE_WIDTH;
 
   function strokePolyline(path, fromS = 0) {
     if (!path || path.points.length < 2) return;
@@ -423,11 +460,11 @@ export function drawSelectedCarRoute() {
     // Glow pass
     routeGraphics.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) routeGraphics.lineTo(pts[i].x, pts[i].y);
-    routeGraphics.stroke({ width: glow, color, alpha: 0.25 });
+    routeGraphics.stroke({ width: glow, color, alpha: ROUTE_GLOW_ALPHA });
     // Line pass
     routeGraphics.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) routeGraphics.lineTo(pts[i].x, pts[i].y);
-    routeGraphics.stroke({ width: thin, color, alpha: 0.9 });
+    routeGraphics.stroke({ width: thin, color, alpha: ROUTE_LINE_ALPHA });
   }
 
   // 1. Remaining current phase path
@@ -476,30 +513,30 @@ export function drawSelectedCarRoute() {
   if (car.route && car.route.length > 0) {
     const destNode = state.nodes.get(car.route[car.route.length - 1]);
     if (destNode) {
-      const pinR  = 10;
+      const pinR  = ROUTE_PIN_RADIUS;
       const tipY  = destNode.y + pinR * 1.6;  // tip of the teardrop
 
       // Shadow
       routeGraphics.circle(destNode.x, destNode.y - pinR * 0.1, pinR * 1.1);
-      routeGraphics.fill({ color: 0x000000, alpha: 0.18 });
+      routeGraphics.fill({ color: NODE_STROKE_COLOR, alpha: ROUTE_PIN_SHADOW_ALPHA });
 
       // Teardrop body (circle + downward triangle)
       routeGraphics.circle(destNode.x, destNode.y - pinR, pinR);
-      routeGraphics.fill({ color, alpha: 0.95 });
+      routeGraphics.fill({ color, alpha: ROUTE_PIN_FILL_ALPHA });
       routeGraphics.poly([
         destNode.x, tipY,
         destNode.x - pinR * 0.65, destNode.y - pinR * 0.3,
         destNode.x + pinR * 0.65, destNode.y - pinR * 0.3,
       ]);
-      routeGraphics.fill({ color, alpha: 0.95 });
+      routeGraphics.fill({ color, alpha: ROUTE_PIN_FILL_ALPHA });
 
       // White border
       routeGraphics.circle(destNode.x, destNode.y - pinR, pinR);
-      routeGraphics.stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
+      routeGraphics.stroke({ width: ROUTE_PIN_BORDER_WIDTH, color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_BORDER_ALPHA });
 
       // White inner dot
       routeGraphics.circle(destNode.x, destNode.y - pinR, pinR * 0.35);
-      routeGraphics.fill({ color: 0xffffff, alpha: 0.95 });
+      routeGraphics.fill({ color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_DOT_ALPHA });
     }
   }
 }
@@ -520,19 +557,24 @@ export function drawCars() {
 
     // Selection glow ring (drawn first, behind the car body)
     if (selected) {
-      carsGraphics.circle(p.x, p.y, 10);
-      carsGraphics.stroke({ width: 2.5, color: 0xffffff, alpha: 0.95 });
+      carsGraphics.circle(p.x, p.y, CAR_SELECTION_RADIUS);
+      carsGraphics.stroke({ width: CAR_SELECTION_STROKE, color: SPEED_LABEL_BG_COLOR, alpha: CAR_SELECTION_ALPHA });
     }
 
     const c = Math.cos(h), s = Math.sin(h);
     const pts = [
-      { x: -6, y: -3.5 }, { x: 6, y: -3.5 },
-      { x: 6, y: 3.5 }, { x: -6, y: 3.5 },
+      { x: -CAR_BODY_HALF_LENGTH, y: -CAR_BODY_HALF_WIDTH },
+      { x: CAR_BODY_HALF_LENGTH, y: -CAR_BODY_HALF_WIDTH },
+      { x: CAR_BODY_HALF_LENGTH, y: CAR_BODY_HALF_WIDTH },
+      { x: -CAR_BODY_HALF_LENGTH, y: CAR_BODY_HALF_WIDTH },
     ].map(q => ({ x: p.x + q.x * c - q.y * s, y: p.y + q.x * s + q.y * c }));
 
     carsGraphics.poly([pts[0].x, pts[0].y, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
     carsGraphics.fill(car.color);
-    carsGraphics.stroke({ width: selected ? 2 : 1.5, color: selected ? 0xffffff : COLORS.carStroke });
+    carsGraphics.stroke({
+      width: selected ? CAR_STROKE_SELECTED_WIDTH : CAR_STROKE_WIDTH,
+      color: selected ? SPEED_LABEL_BG_COLOR : COLORS.carStroke,
+    });
   }
 }
 
@@ -549,7 +591,7 @@ export function drawExplosions(dt) {
     const ringRadius = EXPLOSION_MAX_RADIUS * easeOut;
     const ringAlpha  = (1 - t) * 0.9;
     const ringWidth  = (1 - t) * 6 + 1;
-    const ringColor  = t < 0.4 ? 0xffdd00 : 0xff6600;
+    const ringColor  = t < 0.4 ? EXPLOSION_RING_COLOR_START : EXPLOSION_RING_COLOR_END;
     explosionGraphics.circle(ex.x, ex.y, ringRadius);
     explosionGraphics.stroke({ color: ringColor, width: ringWidth, alpha: ringAlpha });
 
@@ -557,7 +599,7 @@ export function drawExplosions(dt) {
     if (t < 0.3) {
       const flashAlpha = (1 - t / 0.3) * 0.6;
       explosionGraphics.circle(ex.x, ex.y, ringRadius * 0.55);
-      explosionGraphics.fill({ color: 0xffffff, alpha: flashAlpha });
+      explosionGraphics.fill({ color: SPEED_LABEL_BG_COLOR, alpha: flashAlpha });
     }
 
     // Sparks
@@ -569,7 +611,7 @@ export function drawExplosions(dt) {
       const x2 = ex.x + Math.cos(angle) * sparkLen;
       const y2 = ex.y + Math.sin(angle) * sparkLen;
       explosionGraphics.moveTo(x1, y1).lineTo(x2, y2);
-      explosionGraphics.stroke({ color: 0xffaa00, width: 1.5, alpha: sparkAlpha });
+      explosionGraphics.stroke({ color: EXPLOSION_SPARK_COLOR, width: EXPLOSION_SPARK_WIDTH, alpha: sparkAlpha });
     }
 
     return true;
@@ -691,24 +733,25 @@ function drawArrowGlyphs(g, cx, cy, laneHeading, arrowSet) {
   const perpX = -Math.sin(laneHeading), perpY = Math.cos(laneHeading);
 
   types.forEach((type, i) => {
-    const offset = (i - (count - 1) / 2) * 7;
+    const offset = (i - (count - 1) / 2) * ARROW_GROUP_OFFSET;
     const ox = cx + perpX * offset;
     const oy = cy + perpY * offset;
 
     let ah = laneHeading;
-    if (type === "right") ah = laneHeading + Math.PI / 2.2;
-    if (type === "left")  ah = laneHeading - Math.PI / 2.2;
+    if (type === "right") ah = laneHeading + Math.PI / ARROW_TURN_ANGLE_DIVISOR;
+    if (type === "left")  ah = laneHeading - Math.PI / ARROW_TURN_ANGLE_DIVISOR;
 
     const cos = Math.cos(ah), sin = Math.sin(ah);
     const px = -Math.sin(ah), py = Math.cos(ah);
-    const h = 8, w = 4.5;
+    const h = ARROW_HEAD_LENGTH;
+    const w = ARROW_HEAD_WIDTH;
 
     const tip = { x: ox + cos * h,                    y: oy + sin * h };
     const bl  = { x: ox - cos * h * 0.25 - px * w,   y: oy - sin * h * 0.25 - py * w };
     const br  = { x: ox - cos * h * 0.25 + px * w,   y: oy - sin * h * 0.25 + py * w };
 
     g.poly([tip.x, tip.y, bl.x, bl.y, br.x, br.y]);
-    g.fill({ color: 0xffffff, alpha: 0.9 });
+    g.fill({ color: ARROW_FILL_COLOR, alpha: ARROW_FILL_ALPHA });
   });
 }
 
@@ -728,7 +771,7 @@ export function drawLaneArrows() {
         const center = lateralSign * (laneIdx + 0.5) * LANE_WIDTH;
         tmpeOverlayGraphics.moveTo(pA.x + nx * center, pA.y + ny * center)
           .lineTo(pB.x + nx * center, pB.y + ny * center);
-        tmpeOverlayGraphics.stroke({ width: LANE_WIDTH - 2, color: 0xffffff, alpha: 0.18 });
+        tmpeOverlayGraphics.stroke({ width: LANE_WIDTH - 2, color: ARROW_FILL_COLOR, alpha: ARROW_HOVER_ALPHA });
       }
     }
   }
@@ -783,14 +826,22 @@ export function drawSignals() {
       const r = SIGNAL_RADIUS;
 
       signalGraphics.circle(pt.x, pt.y, r).fill(color);
-      signalGraphics.circle(pt.x, pt.y, r).stroke({ width: 1.5, color: 0x000000, alpha: 0.5 });
+      signalGraphics.circle(pt.x, pt.y, r).stroke({
+        width: SIGNAL_STROKE_WIDTH,
+        color: SIGNAL_STROKE_COLOR,
+        alpha: SIGNAL_STROKE_ALPHA,
+      });
     }
 
     // In signal tool mode: ring around nodes that have a signal
     if (state.tool === "signal") {
       const node = state.nodes.get(nodeId);
       if (node) {
-        signalGraphics.circle(node.x, node.y, 14).stroke({ width: 2, color: 0xffdd00, alpha: 0.85 });
+        signalGraphics.circle(node.x, node.y, SIGNAL_TOOL_RING_RADIUS).stroke({
+          width: SIGNAL_TOOL_RING_WIDTH,
+          color: SIGNAL_TOOL_RING_COLOR,
+          alpha: SIGNAL_TOOL_RING_ALPHA,
+        });
       }
     }
   }
@@ -828,7 +879,10 @@ export function drawSpeedLabels() {
       bg.label = "bg";
       sign.addChild(bg);
 
-      const txt = new PIXI.Text({ text: "", style: { fontSize: SPEED_SIGN_FONT_SIZE, fill: 0x111111, fontWeight: "bold" } });
+      const txt = new PIXI.Text({
+        text: "",
+        style: { fontSize: SPEED_SIGN_FONT_SIZE, fill: SPEED_LABEL_TEXT_COLOR, fontWeight: "bold" },
+      });
       txt.label = "lbl";
       txt.anchor.set(0.5, 0.5);
       sign.addChild(txt);
@@ -843,7 +897,7 @@ export function drawSpeedLabels() {
       const bg = sign.getChildByLabel("bg");
       bg.clear();
       bg.circle(0, 0, SPEED_SIGN_RADIUS);
-      bg.fill(0xffffff);
+      bg.fill(SPEED_LABEL_BG_COLOR);
       bg.stroke({ width: SPEED_SIGN_BORDER_SIZE, color: SPEED_SIGN_BORDER_COLOR });
 
       sign.getChildByLabel("lbl").text = String(seg.speedLimit);
@@ -852,7 +906,7 @@ export function drawSpeedLabels() {
     sign.x = mx;
     sign.y = my;
     sign.scale.set(1);
-    sign.alpha = (state.tool === "speed") ? 1.0 : 0.8;
+    sign.alpha = (state.tool === "speed") ? SPEED_LABEL_ALPHA_ACTIVE : SPEED_LABEL_ALPHA_IDLE;
   }
 }
 
@@ -889,8 +943,12 @@ export function drawConnectorTool() {
       const node = state.nodes.get(nodeId);
       if (!node) continue;
       const hovered = state.hoveredNodeId === nodeId;
-      connectorOverlayGraphics.circle(node.x, node.y, 18);
-      connectorOverlayGraphics.stroke({ color: hovered ? 0xffd700 : 0x88bbdd, width: 2, alpha: 0.7 });
+      connectorOverlayGraphics.circle(node.x, node.y, CONNECTOR_NODE_RING_RADIUS);
+      connectorOverlayGraphics.stroke({
+        color: hovered ? CONNECTOR_NODE_RING_HOVER_COLOR : CONNECTOR_NODE_RING_COLOR,
+        width: CONNECTOR_NODE_RING_WIDTH,
+        alpha: CONNECTOR_NODE_RING_ALPHA,
+      });
     }
     return;
   }
@@ -906,9 +964,9 @@ export function drawConnectorTool() {
   for (const conn of junc.connectors) {
     const isFromSelected = ct.selectedInKey &&
       conn.inSegId === selSegId && conn.inDir === selDir && conn.inLane === selLane;
-    const color = conn.userDefined ? COLORS.selected : 0x3399ff;
-    const alpha = isFromSelected ? 1.0 : (conn.userDefined ? 0.75 : 0.3);
-    const width = isFromSelected ? 4 : 2.5;
+    const color = conn.userDefined ? COLORS.selected : CONNECTOR_DEFAULT_COLOR;
+    const alpha = isFromSelected ? SPEED_LABEL_ALPHA_ACTIVE : (conn.userDefined ? CONNECTOR_USER_ALPHA : CONNECTOR_DIM_ALPHA);
+    const width = isFromSelected ? CONNECTOR_WIDTH_SELECTED : CONNECTOR_WIDTH;
     const pts = conn.path.points;
     connectorOverlayGraphics.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) connectorOverlayGraphics.lineTo(pts[i].x, pts[i].y);
@@ -924,14 +982,17 @@ export function drawConnectorTool() {
       c.inSegId === selSegId && c.inDir === selDir && c.inLane === selLane &&
       c.outSegId === out.segId && c.outDir === out.dir && c.outLane === out.laneIdx
     );
-    const r = isTarget ? 9 : 6;
+    const r = isTarget ? CONNECTOR_OUT_TARGET_R : CONNECTOR_OUT_R;
     connectorOverlayGraphics.circle(out.ep.x, out.ep.y, r);
     if (isTarget) {
-      connectorOverlayGraphics.fill({ color: hasConn ? COLORS.selected : color, alpha: 0.85 });
-      connectorOverlayGraphics.circle(out.ep.x, out.ep.y, r + 2);
-      connectorOverlayGraphics.stroke({ color: hasConn ? 0xffffff : 0xaaaaaa, width: 1.5 });
+      connectorOverlayGraphics.fill({ color: hasConn ? COLORS.selected : color, alpha: CONNECTOR_TARGET_FILL_ALPHA });
+      connectorOverlayGraphics.circle(out.ep.x, out.ep.y, r + CONNECTOR_OUT_EXTRA_R);
+      connectorOverlayGraphics.stroke({
+        color: hasConn ? CONNECTOR_SELECTED_HALO_COLOR : CONNECTOR_OUT_STROKE_COLOR,
+        width: CONNECTOR_OUT_STROKE,
+      });
     } else {
-      connectorOverlayGraphics.stroke({ color, width: 1.5, alpha: 0.5 });
+      connectorOverlayGraphics.stroke({ color, width: CONNECTOR_OUT_STROKE, alpha: CONNECTOR_OUT_IDLE_ALPHA });
     }
   }
 
@@ -940,12 +1001,12 @@ export function drawConnectorTool() {
     const inKey = `${inc.segId}:${inc.dir}:${inc.laneIdx}`;
     const selected = ct.selectedInKey === inKey;
     const color = laneEndpointColor(inc.segId);
-    const r = selected ? 10 : 7;
+    const r = selected ? CONNECTOR_IN_SELECTED_R : CONNECTOR_IN_R;
     connectorOverlayGraphics.circle(inc.ep.x, inc.ep.y, r);
-    connectorOverlayGraphics.fill({ color: selected ? 0xffd700 : color });
+    connectorOverlayGraphics.fill({ color: selected ? CONNECTOR_IN_SELECTED_FILL_COLOR : color });
     if (selected) {
-      connectorOverlayGraphics.circle(inc.ep.x, inc.ep.y, r + 3);
-      connectorOverlayGraphics.stroke({ color: 0xffffff, width: 2 });
+      connectorOverlayGraphics.circle(inc.ep.x, inc.ep.y, r + CONNECTOR_IN_SELECTED_EXTRA_R);
+      connectorOverlayGraphics.stroke({ color: CONNECTOR_SELECTED_HALO_COLOR, width: CONNECTOR_SELECTED_HALO_WIDTH });
     }
   }
 }
