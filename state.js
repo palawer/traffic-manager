@@ -1,17 +1,18 @@
 export { LANE_WIDTH, GRID, NODE_SNAP_DIST, JOIN_GRACE_TIME } from "./config.js";
+import { COLOR_ROAD, COLOR_CENTERLINE } from "./config.js";
 export const ROAD_WIDTH = 44; // kept for compat (2 × LANE_WIDTH)
 
 export const COLORS = {
   bg: 0xd9e5db,
   gridMinor: 0xccdbcc,
   gridMajor: 0xc1d1c0,
-  road: 0x2d3138,
+  road: COLOR_ROAD,
   roadShoulder: 0x444a52,
-  centerline: 0xe8c840,
+  centerline: COLOR_CENTERLINE,
   laneDivider: 0xd0d4d8,
   edgeLine: 0xf0f0f0,
   stopLine: 0xffffff,
-  junction: 0x2d3138,
+  junction: COLOR_ROAD,
   selected: 0xf0b429,
   nodeDefault: 0x8a8f96,
   nodeHover: 0xffd700,
@@ -40,8 +41,7 @@ export const state = {
   cars: [],
   pendingSpawns: 0,
   crashes: 0,
-  explosions: [],       // [{ x, y, age, duration, sparkAngles }]
-  connectorWear: new Map(), // wearKey → count  (how many cars traversed each connector)
+  explosions: [],   // [{ x, y, age, duration, sparkAngles }]
   networkDirty: true,
   // editor
   tool: "segment",           // "select" | "segment"

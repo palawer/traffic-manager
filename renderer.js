@@ -1,5 +1,9 @@
 import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
-import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS } from "./config.js";
+import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
+  CONNECTOR_PATH_WIDTH, CONNECTOR_PATH_COLOR, CONNECTOR_PATH_ALPHA,
+  CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP,
+  NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS,
+  SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
@@ -250,7 +254,7 @@ export function drawRoads() {
 
     // Centerline (yellow dashes if 2-way)
     if (seg.lanesAtoB > 0 && seg.lanesBtoA > 0) {
-      drawDashedLine(laneMarkingsGraphics, pA, pB, 0, lw * 1.2, COLORS.centerline, 16, 8);
+      drawDashedLine(laneMarkingsGraphics, pA, pB, 0, CENTERLINE_WIDTH, COLORS.centerline, CENTERLINE_DASH, CENTERLINE_GAP);
     }
 
     // Inner lane dividers (AtoB side)
@@ -274,31 +278,14 @@ export function drawRoads() {
     drawStopLine(laneMarkingsGraphics, pB, nx, ny, halfW, lw * 2);
   }
 
-  // Worn asphalt: grey lines along heavily-used connector paths
+  // Draw connector paths (always visible as road markings)
   for (const [, junc] of state.junctions) {
     for (const conn of junc.connectors) {
-      const wk = `${conn.nodeId}:${conn.inSegId}:${conn.inDir}:${conn.inLane}:${conn.outSegId}:${conn.outDir}:${conn.outLane}`;
-      const wear = state.connectorWear.get(wk) ?? 0;
-      if (wear === 0) continue;
-      const alpha = Math.min(wear / 40, 1) * 0.7;
       const pts = conn.path.points;
       if (pts.length < 2) continue;
       laneMarkingsGraphics.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) laneMarkingsGraphics.lineTo(pts[i].x, pts[i].y);
-      laneMarkingsGraphics.stroke({ width: lw * 3, color: 0x888888, alpha });
-    }
-  }
-
-  // Debug: draw connector paths
-  if (state.debugLanes) {
-    for (const [, junc] of state.junctions) {
-      for (const conn of junc.connectors) {
-        const pts = conn.path.points;
-        if (pts.length < 2) continue;
-        laneMarkingsGraphics.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) laneMarkingsGraphics.lineTo(pts[i].x, pts[i].y);
-        laneMarkingsGraphics.stroke({ width: lw, color: COLORS.connectorPath, alpha: 0.6 });
-      }
+      laneMarkingsGraphics.stroke({ width: CONNECTOR_PATH_WIDTH, color: CONNECTOR_PATH_COLOR, alpha: CONNECTOR_PATH_ALPHA });
     }
   }
 
@@ -334,10 +321,10 @@ function drawNodes() {
     const isSelected = (node.id === state.selectedNodeId);
     const isHovered = (node.id === state.hoveredNodeId);
     const color = isSelected ? COLORS.nodeSelected : isHovered ? COLORS.nodeHover : COLORS.nodeDefault;
-    const radius = isSelected ? 7 : 5;
-    nodeGraphics.circle(node.x, node.y, radius / state.view.zoom * 1.5);
+    const radius = isSelected ? NODE_RADIUS_SELECTED : NODE_RADIUS;
+    nodeGraphics.circle(node.x, node.y, radius);
     nodeGraphics.fill(color);
-    nodeGraphics.stroke({ width: 1.5 / state.view.zoom, color: 0x000000, alpha: 0.4 });
+    nodeGraphics.stroke({ width: 1.5, color: 0x000000, alpha: 0.4 });
   }
 }
 
@@ -629,7 +616,6 @@ export function setupUi() {
     state.cars = [];
     state.explosions = [];
     state.crashes = 0;
-    state.connectorWear.clear();
     state.pendingSpawns = 0;
     state.selectedNodeId = null;
     state.selectedSegId = null;
@@ -743,7 +729,7 @@ export function drawSignals() {
       const isManaged = signal?.phases.some(p => p.greenConnectors.has(armKey));
       const isGreen = !isManaged || (phase?.greenConnectors.has(armKey) ?? true);
       const color = isGreen ? COLORS.trafficGreen : COLORS.trafficRed;
-      const r = 5;
+      const r = SIGNAL_RADIUS;
 
       signalGraphics.circle(pt.x, pt.y, r).fill(color);
       signalGraphics.circle(pt.x, pt.y, r).stroke({ width: 1.5, color: 0x000000, alpha: 0.5 });
@@ -753,8 +739,7 @@ export function drawSignals() {
     if (state.tool === "signal") {
       const node = state.nodes.get(nodeId);
       if (node) {
-        const r = 14 / state.view.zoom;
-        signalGraphics.circle(node.x, node.y, r).stroke({ width: 2 / state.view.zoom, color: 0xffdd00, alpha: 0.85 });
+        signalGraphics.circle(node.x, node.y, 14).stroke({ width: 2, color: 0xffdd00, alpha: 0.85 });
       }
     }
   }
@@ -792,7 +777,7 @@ export function drawSpeedLabels() {
       bg.label = "bg";
       sign.addChild(bg);
 
-      const txt = new PIXI.Text({ text: "", style: { fontSize: 13, fill: 0x111111, fontWeight: "bold" } });
+      const txt = new PIXI.Text({ text: "", style: { fontSize: SPEED_SIGN_FONT_SIZE, fill: 0x111111, fontWeight: "bold" } });
       txt.label = "lbl";
       txt.anchor.set(0.5, 0.5);
       sign.addChild(txt);
@@ -805,17 +790,17 @@ export function drawSpeedLabels() {
       sign._lastSpeed = seg.speedLimit;
 
       const bg = sign.getChildByLabel("bg");
-      const R = 13;
       bg.clear();
-      bg.circle(0, 0, R).fill(0xffffff);
-      bg.circle(0, 0, R).stroke({ width: 2.5, color: 0xcc0000 });
+      bg.circle(0, 0, SPEED_SIGN_RADIUS);
+      bg.fill(0xffffff);
+      bg.stroke({ width: SPEED_SIGN_BORDER_SIZE, color: SPEED_SIGN_BORDER_COLOR });
 
       sign.getChildByLabel("lbl").text = String(seg.speedLimit);
     }
 
     sign.x = mx;
     sign.y = my;
-    sign.scale.set(1 / state.view.zoom);
+    sign.scale.set(1);
     sign.alpha = (state.tool === "speed") ? 1.0 : 0.8;
   }
 }

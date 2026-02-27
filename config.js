@@ -8,15 +8,32 @@ export const LANE_WIDTH      = 14;   // width of one lane in world pixels
 export const GRID            = 20;   // editor snap grid
 export const NODE_SNAP_DIST  = 20;   // px to auto-snap to an existing node
 
+// ── Road colors ───────────────────────────────────────────────────────────────
+export const COLOR_ROAD       = 0x2d3138; // asphalt body (segments + junctions)
+export const COLOR_CENTERLINE = 0xe8c840; // yellow dashes between directions
+
+// ── Road markings ─────────────────────────────────────────────────────────────
+export const CENTERLINE_WIDTH = 2;   // centerline stroke width (world px)
+export const CENTERLINE_DASH  = 16;  // centerline dash length (world px)
+export const CENTERLINE_GAP   = 8;   // centerline gap length (world px)
+
+// ── Nodes ─────────────────────────────────────────────────────────────────────
+export const NODE_RADIUS          = 7;   // default node handle radius (world px)
+export const NODE_RADIUS_SELECTED = 10;  // selected node handle radius (world px)
+
 // ── Junctions ─────────────────────────────────────────────────────────────────
 export const JUNCTION_PADDING      = 4;          // extra clearance (px) beyond road half-width
 export const STRAIGHT_THRESHOLD    = Math.PI / 6; // turn < 30° → classified as "straight"
 export const CONNECTOR_BEZIER_STEPS   = 12;      // curve smoothness (segments per bezier)
 export const CONNECTOR_BEZIER_FACTOR  = 0.4;     // control-point pull factor (0–1)
 export const CONNECTOR_BEZIER_MIN     = 10;      // minimum handle length (px)
+export const CONNECTOR_PATH_WIDTH     = 6;       // world px width of connector path markings
+export const CONNECTOR_PATH_COLOR     = 0xffffff; // color of connector path markings
+export const CONNECTOR_PATH_ALPHA     = 0.05;    // opacity of connector path markings
 
 // ── Traffic signals ───────────────────────────────────────────────────────────
 export const SIGNAL_PHASE_DURATION = 5;   // seconds each phase stays green
+export const SIGNAL_RADIUS         = 5;   // radius of signal dot (world px)
 
 // ── Simulation timing ─────────────────────────────────────────────────────────
 export const MAX_DT         = 0.05;  // max simulated seconds per frame (prevents jumps)
@@ -55,12 +72,16 @@ export const HIT_CONNECTOR_EP = 14;  // connector-tool endpoint dots
 // ── Camera ────────────────────────────────────────────────────────────────────
 export const ZOOM_SENSITIVITY = 0.0012;
 export const ZOOM_MIN         = 0.2;
-export const ZOOM_MAX         = 4.0;
+export const ZOOM_MAX         = 8.0;
 
 // ── Speed limits ──────────────────────────────────────────────────────────────
-export const DEFAULT_SPEED_LIMIT = 80;
-export const SPEED_PRESETS       = [30, 50, 80, 120]; // cycling order
-export const MAX_LANES           = 4;  // max lanes per direction in the property panel
+export const DEFAULT_SPEED_LIMIT  = 80;
+export const SPEED_PRESETS        = [30, 50, 80, 120]; // cycling order
+export const MAX_LANES            = 4;   // max lanes per direction in the property panel
+export const SPEED_SIGN_RADIUS       = 8;        // world px radius of speed sign circle
+export const SPEED_SIGN_FONT_SIZE    = 8;        // font size of speed number (world px)
+export const SPEED_SIGN_BORDER_COLOR = 0xcc0000; // border color of speed sign
+export const SPEED_SIGN_BORDER_SIZE  = 2.5;      // border stroke width (world px)
 
 // ── Collisions & explosions ────────────────────────────────────────────────────
 export const CRASH_DIST          = 12;   // px — cars closer than this collide
