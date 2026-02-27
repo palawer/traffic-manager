@@ -173,7 +173,7 @@ function updateCarOnSegment(car, dt) {
   let target = seg ? seg.speedLimit * car.speedFactor : car.desiredSpeed;
 
   // Determine the desired next step (for connector routing)
-  const nextStep = (car.laneSeq && car.routeStep + 1 < car.laneSeq.length)
+  let nextStep = (car.laneSeq && car.routeStep + 1 < car.laneSeq.length)
     ? car.laneSeq[car.routeStep + 1] : null;
 
   // Look ahead to junction
