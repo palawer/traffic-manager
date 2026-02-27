@@ -221,9 +221,15 @@ function updateCarOnSegment(car, dt) {
       nextStep = car.laneSeq[car.routeStep + 1]; // laneSeq[0] since routeStep = -1
     }
 
-    const conn = nextStep
+    let conn = nextStep
       ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
       : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
+
+    // Robust fallback: if planned connector does not exist, use any real connector
+    // from this incoming lane so cars do not disappear at the junction.
+    if (!conn) {
+      conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
+    }
 
     if (conn && isConnectorGreen(conn) && !isJunctionBlocked(conn)) {
       car.phase = "junction";
@@ -379,8 +385,15 @@ function rerouteFrom(car, fromNodeId) {
     // Verify a connector exists from the car's current lane to the first step
     // (rules out U-turns and other missing connectors)
     const firstStep = laneSeq[0];
-    const conn = findConnector(fromNodeId, car.segId, car.dir, car.laneIdx,
-                               firstStep.segId, firstStep.dir, firstStep.laneIdx);
+    const conn = findConnector(
+      fromNodeId,
+      car.segId,
+      car.dir,
+      car.laneIdx,
+      firstStep.segId,
+      firstStep.dir,
+      firstStep.laneIdx
+    ) || findConnector(fromNodeId, car.segId, car.dir, car.laneIdx);
     if (!conn) continue;
     car.route = route;
     car.laneSeq = laneSeq;

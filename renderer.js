@@ -294,8 +294,8 @@ export function drawRoads() {
   }
 
   if (state.debugLanes) {
-    const lineW = 2.2 / state.view.zoom;
-    const connectorW = 2.6 / state.view.zoom;
+    const lineW = 2.2;
+    const connectorW = 2.6;
 
     // 1) Segment lane centerlines: exactly where cars run on segments.
     for (const seg of state.segments.values()) {
@@ -304,14 +304,14 @@ export function drawRoads() {
         if (!path || path.points.length < 2) continue;
         debugTrajectoriesGraphics.moveTo(path.points[0].x, path.points[0].y);
         for (let i = 1; i < path.points.length; i++) debugTrajectoriesGraphics.lineTo(path.points[i].x, path.points[i].y);
-        debugTrajectoriesGraphics.stroke({ width: lineW, color: COLORS.debugLane, alpha: 0.98 });
+        debugTrajectoriesGraphics.stroke({ width: lineW, color: COLORS.debugLane, alpha: 0.98, pixelLine: true });
       }
       for (let lane = 0; lane < seg.lanesBtoA; lane++) {
         const path = buildLanePath(seg, state.nodes, "BtoA", lane);
         if (!path || path.points.length < 2) continue;
         debugTrajectoriesGraphics.moveTo(path.points[0].x, path.points[0].y);
         for (let i = 1; i < path.points.length; i++) debugTrajectoriesGraphics.lineTo(path.points[i].x, path.points[i].y);
-        debugTrajectoriesGraphics.stroke({ width: lineW, color: COLORS.debugLane, alpha: 0.98 });
+        debugTrajectoriesGraphics.stroke({ width: lineW, color: COLORS.debugLane, alpha: 0.98, pixelLine: true });
       }
     }
 
@@ -322,7 +322,7 @@ export function drawRoads() {
         if (!pts || pts.length < 2) continue;
         debugTrajectoriesGraphics.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) debugTrajectoriesGraphics.lineTo(pts[i].x, pts[i].y);
-        debugTrajectoriesGraphics.stroke({ width: connectorW, color: COLORS.debugLane, alpha: 1 });
+        debugTrajectoriesGraphics.stroke({ width: connectorW, color: COLORS.debugLane, alpha: 1, pixelLine: true });
       }
     }
   }

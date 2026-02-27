@@ -63,7 +63,11 @@ export function findRoute(fromNodeId, toNodeId) {
     // Expand neighbors via segments
     const segs = getNodeSegments(current);
     for (const seg of segs) {
-      const neighbor = (seg.nodeA === current) ? seg.nodeB : seg.nodeA;
+      const goAtoB = seg.nodeA === current;
+      const lanesThisDir = goAtoB ? seg.lanesAtoB : seg.lanesBtoA;
+      if (lanesThisDir <= 0) continue; // one-way enforcement
+
+      const neighbor = goAtoB ? seg.nodeB : seg.nodeA;
       if (!nodes.has(neighbor)) continue;
 
       const neighborNode = nodes.get(neighbor);
@@ -113,6 +117,7 @@ export function routeToLaneSequence(routeNodeIds) {
 
     const dir = (seg.nodeA === fromNodeId) ? "AtoB" : "BtoA";
     const totalLanes = (dir === "AtoB") ? seg.lanesAtoB : seg.lanesBtoA;
+    if (totalLanes <= 0) continue;
 
     // Determine next turn type (for lane selection)
     let nextTurnType = "straight";
@@ -162,6 +167,8 @@ export function routeToLaneSequence(routeNodeIds) {
       else if (nextTurnType === "left") bestLane = totalLanes - 1;
       else bestLane = Math.floor((totalLanes - 1) / 2);
     }
+
+    bestLane = Math.max(0, Math.min(totalLanes - 1, bestLane));
 
     sequence.push({ segId: seg.id, dir, laneIdx: bestLane });
   }
