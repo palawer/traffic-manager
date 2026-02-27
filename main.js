@@ -16,6 +16,7 @@ import {
   drawConnectorTool,
   drawSignals,
   drawSpeedLabels,
+  fitViewToNetwork,
   updateStatus,
   updatePropertiesPanel,
 } from "./renderer.js";
@@ -30,7 +31,10 @@ init().catch(err => {
 async function init() {
   const { app } = await initRenderer();
   setupUi();
-  if (loadState()) rebuildJunctions();
+  if (loadState()) {
+    rebuildJunctions();
+    fitViewToNetwork();
+  }
   setupInput();
 
   app.ticker.add(ticker => {

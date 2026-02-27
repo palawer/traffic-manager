@@ -17,7 +17,7 @@ import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   CONNECTOR_DEFAULT_COLOR, CONNECTOR_USER_ALPHA, CONNECTOR_DIM_ALPHA, CONNECTOR_WIDTH, CONNECTOR_WIDTH_SELECTED,
   CONNECTOR_OUT_R, CONNECTOR_OUT_TARGET_R, CONNECTOR_OUT_EXTRA_R, CONNECTOR_OUT_STROKE, CONNECTOR_OUT_STROKE_COLOR,
   CONNECTOR_TARGET_FILL_ALPHA, CONNECTOR_OUT_IDLE_ALPHA, CONNECTOR_IN_R, CONNECTOR_IN_SELECTED_R, CONNECTOR_IN_SELECTED_EXTRA_R, CONNECTOR_SELECTED_HALO_COLOR, CONNECTOR_SELECTED_HALO_WIDTH, CONNECTOR_IN_SELECTED_FILL_COLOR,
-  NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS,
+  NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS, ZOOM_MIN, ZOOM_MAX,
   SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_TEXT_RESOLUTION, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE, SPEED_SIGN_BORDER_ALPHA, SPEED_SIGN_BG_ALPHA } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
@@ -980,6 +980,44 @@ export function setTool(tool) {
   document.querySelectorAll("button[data-tool]").forEach(b => {
     b.classList.toggle("active", b.dataset.tool === tool);
   });
+}
+
+export function fitViewToNetwork() {
+  if (state.nodes.size === 0) return false;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of state.nodes.values()) {
+    if (n.x < minX) minX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y > maxY) maxY = n.y;
+  }
+
+  // Include visual road width in bounds so wide roads stay inside the frame.
+  let maxRoadHalf = LANE_WIDTH;
+  for (const seg of state.segments.values()) {
+    const half = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH * 0.5;
+    if (half > maxRoadHalf) maxRoadHalf = half;
+  }
+  const worldPad = maxRoadHalf + 20;
+  minX -= worldPad; minY -= worldPad;
+  maxX += worldPad; maxY += worldPad;
+
+  const boundsW = Math.max(1, maxX - minX);
+  const boundsH = Math.max(1, maxY - minY);
+  const { width, height } = rendererSize();
+  const screenPad = 48;
+  const usableW = Math.max(1, width - screenPad * 2);
+  const usableH = Math.max(1, height - screenPad * 2);
+
+  const zoomX = usableW / boundsW;
+  const zoomY = usableH / boundsH;
+  const zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(zoomX, zoomY)));
+
+  state.view.x = (minX + maxX) * 0.5;
+  state.view.y = (minY + maxY) * 0.5;
+  state.view.zoom = zoom;
+  return true;
 }
 
 function laneEndpointColor(segId) {
