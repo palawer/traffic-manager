@@ -40,7 +40,8 @@ export const state = {
   cars: [],
   pendingSpawns: 0,
   crashes: 0,
-  explosions: [],   // [{ x, y, age, duration, sparkAngles }]
+  explosions: [],       // [{ x, y, age, duration, sparkAngles }]
+  connectorWear: new Map(), // wearKey → count  (how many cars traversed each connector)
   networkDirty: true,
   // editor
   tool: "segment",           // "select" | "segment"

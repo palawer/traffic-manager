@@ -298,6 +298,9 @@ function updateCarOnJunction(car, dt) {
           car.connectorId = null;
           car.joinGrace = JOIN_GRACE_TIME;
           car.desiredSpeed = outSeg.speedLimit * car.speedFactor;
+          // Record wear on this connector
+          const wk = `${conn.nodeId}:${conn.inSegId}:${conn.inDir}:${conn.inLane}:${conn.outSegId}:${conn.outDir}:${conn.outLane}`;
+          state.connectorWear.set(wk, (state.connectorWear.get(wk) ?? 0) + 1);
           // Advance route step if this matches our plan
           advanceRouteStepIfMatches(car, conn.outSegId, conn.outDir, conn.outLane);
           return;
