@@ -20,16 +20,36 @@ import { buildLanePath } from "./traversal.js";
  */
 export function isConnectorGreen(connector) {
   if (!connector) return true;
+  const sig = getConnectorSignalDebug(connector);
+  return sig.green;
+}
+
+function getConnectorSignalDebug(connector) {
+  if (!connector) return { green: true, managed: false, phaseIndex: -1, phaseCount: 0, phaseTimer: 0 };
   const signal = state.signals.get(connector.nodeId);
-  if (!signal) return true;
+  if (!signal) return { green: true, managed: false, phaseIndex: -1, phaseCount: 0, phaseTimer: 0 };
   const armKey = `${connector.inSegId}:${connector.inDir}`;
   // If this arm isn't explicitly assigned to any phase (e.g. old saved data
   // with integer IDs, or a new segment added to an existing junction),
   // treat it as unmanaged → always green.
-  const isManaged = signal.phases.some(p => p.greenConnectors.has(armKey));
-  if (!isManaged) return true;
+  const managed = signal.phases.some(p => p.greenConnectors.has(armKey));
+  if (!managed) {
+    return {
+      green: true,
+      managed: false,
+      phaseIndex: signal.currentPhase ?? -1,
+      phaseCount: signal.phases.length || 0,
+      phaseTimer: signal.phaseTimer ?? 0,
+    };
+  }
   const phase = signal.phases[signal.currentPhase];
-  return phase?.greenConnectors.has(armKey) ?? true;
+  return {
+    green: phase?.greenConnectors.has(armKey) ?? true,
+    managed: true,
+    phaseIndex: signal.currentPhase ?? -1,
+    phaseCount: signal.phases.length || 0,
+    phaseTimer: signal.phaseTimer ?? 0,
+  };
 }
 
 /**
@@ -125,6 +145,22 @@ export function spawnCar() {
     desiredSpeed: seg.speedLimit * (SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE),
     joinGrace: 0,
     waiting: false,
+    // debug telemetry
+    debugBrakeReason: "none",
+    debugObstacleDist: Infinity,
+    debugRemToEnd: 0,
+    debugTargetSpeed: 0,
+    debugConnExists: false,
+    debugSignalGreen: null,
+    debugSignalPhase: "",
+    debugSignalTimer: 0,
+    debugExpectedConnectorId: null,
+    debugCurrentConnectorId: null,
+    debugNextStep: "",
+    debugInvalidConnector: false,
+    debugWaitTime: 0,
+    debugStoppedTotal: 0,
+    debugReroutes: 0,
   };
 
   state.cars.push(car);
@@ -184,6 +220,15 @@ function updateCarOnSegment(car, dt) {
   const remToEnd = car.path.length - car.s;
   let stopBeforeLineS = null;
   const stopLineHoldS = Math.max(0, car.path.length - CAR_BODY_HALF_LENGTH - STOP_LINE_CLEARANCE);
+  car.debugBrakeReason = "none";
+  car.debugRemToEnd = remToEnd;
+  car.debugConnExists = false;
+  car.debugSignalGreen = null;
+  car.debugSignalPhase = "";
+  car.debugSignalTimer = 0;
+  car.debugExpectedConnectorId = null;
+  car.debugCurrentConnectorId = null;
+  car.debugInvalidConnector = false;
 
   // Collision detection with cars on same segment/lane
   let obstacleDist = Infinity;
@@ -203,6 +248,7 @@ function updateCarOnSegment(car, dt) {
   // Determine the desired next step (for connector routing)
   let nextStep = (car.laneSeq && car.routeStep + 1 < car.laneSeq.length)
     ? car.laneSeq[car.routeStep + 1] : null;
+  car.debugNextStep = nextStep ? `${nextStep.segId}:${nextStep.dir}:${nextStep.laneIdx}` : "reroute";
 
   // Look ahead to junction
   if (remToEnd < JUNCTION_LOOKAHEAD && seg) {
@@ -229,19 +275,35 @@ function updateCarOnSegment(car, dt) {
         }
       }
       if (conn) {
-        if (!isConnectorGreen(conn) || isJunctionBlocked(conn)) {
+        car.debugExpectedConnectorId = conn.id;
+        car.debugConnExists = true;
+        const sig = getConnectorSignalDebug(conn);
+        car.debugSignalGreen = sig.green;
+        car.debugSignalPhase = sig.managed ? `${sig.phaseIndex + 1}/${sig.phaseCount}` : "unmanaged";
+        car.debugSignalTimer = sig.phaseTimer;
+        if (!sig.green || isJunctionBlocked(conn)) {
           target = 0;
           stopBeforeLineS = stopLineHoldS;
+          car.debugBrakeReason = !sig.green ? "red_light" : "blocked_connector";
         }
       } else {
         target = 0;
         stopBeforeLineS = stopLineHoldS;
+        car.debugBrakeReason = "no_connector";
+        car.debugInvalidConnector = true;
       }
     }
   }
 
-  if (obstacleDist < CAR_STOP_DIST) target = 0;
-  else if (obstacleDist < CAR_SLOW_DIST) target *= CAR_SLOW_FACTOR;
+  if (obstacleDist < CAR_STOP_DIST) {
+    target = 0;
+    car.debugBrakeReason = "car_ahead";
+  } else if (obstacleDist < CAR_SLOW_DIST) {
+    target *= CAR_SLOW_FACTOR;
+    if (car.debugBrakeReason === "none") car.debugBrakeReason = "car_ahead";
+  }
+  car.debugObstacleDist = obstacleDist;
+  car.debugTargetSpeed = target;
 
   applyAcceleration(car, target, dt);
 
@@ -274,6 +336,7 @@ function updateCarOnSegment(car, dt) {
         // No viable route right now: wait before stop line and retry next frames.
         car.s = stopLineHoldS;
         car.speed = 0;
+        car.debugBrakeReason = "reroute_pending";
         return;
       }
       nextStep = car.laneSeq[car.routeStep + 1]; // laneSeq[0] since routeStep = -1
@@ -296,6 +359,7 @@ function updateCarOnSegment(car, dt) {
     if (conn && isConnectorGreen(conn) && !isJunctionBlocked(conn)) {
       car.phase = "junction";
       car.connectorId = conn.id;
+      car.debugCurrentConnectorId = conn.id;
       car.junctionNodeId = conn.nodeId;
       car.junctionPath = conn.path;
       car.junctionS = 0;
@@ -314,12 +378,16 @@ function updateCarOnSegment(car, dt) {
       if (!rerouteFrom(car, destNodeId)) {
         car.s = stopLineHoldS;
         car.speed = 0;
+        car.debugBrakeReason = "reroute_pending";
+        car.debugInvalidConnector = true;
         return;
       }
       nextStep = car.laneSeq[car.routeStep + 1];
       if (!nextStep) {
         car.s = stopLineHoldS;
         car.speed = 0;
+        car.debugBrakeReason = "reroute_pending";
+        car.debugInvalidConnector = true;
         return;
       }
       conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
@@ -327,6 +395,7 @@ function updateCarOnSegment(car, dt) {
       if (conn && isConnectorGreen(conn) && !isJunctionBlocked(conn)) {
         car.phase = "junction";
         car.connectorId = conn.id;
+        car.debugCurrentConnectorId = conn.id;
         car.junctionNodeId = conn.nodeId;
         car.junctionPath = conn.path;
         car.junctionS = 0;
@@ -337,9 +406,14 @@ function updateCarOnSegment(car, dt) {
       } else {
         car.s = stopLineHoldS;
         car.speed = 0;
+        car.debugBrakeReason = "connector_unavailable";
+        car.debugInvalidConnector = true;
       }
     }
   }
+  car.waiting = car.speed < 0.2 && car.debugTargetSpeed <= 0.01;
+  car.debugWaitTime = car.waiting ? (car.debugWaitTime || 0) + dt : 0;
+  if (car.waiting) car.debugStoppedTotal = (car.debugStoppedTotal || 0) + dt;
 }
 
 function updateCarOnJunction(car, dt) {
@@ -347,6 +421,17 @@ function updateCarOnJunction(car, dt) {
     car.remove = true;
     return;
   }
+  car.debugBrakeReason = "none";
+  car.debugConnExists = true;
+  car.debugSignalGreen = true;
+  car.debugSignalPhase = "";
+  car.debugSignalTimer = 0;
+  car.debugCurrentConnectorId = car.connectorId;
+  car.debugExpectedConnectorId = car.connectorId;
+  const nextStep = (car.laneSeq && car.routeStep + 1 < car.laneSeq.length)
+    ? car.laneSeq[car.routeStep + 1] : null;
+  car.debugNextStep = nextStep ? `${nextStep.segId}:${nextStep.dir}:${nextStep.laneIdx}` : "reroute";
+  car.debugInvalidConnector = false;
 
   // Find connector using cached nodeId (O(1) junction lookup)
   let conn = null;
@@ -365,8 +450,16 @@ function updateCarOnJunction(car, dt) {
   }
 
   let target = car.desiredSpeed;
-  if (obstacleDist < CAR_STOP_DIST) target = 0;
-  else if (obstacleDist < CAR_SLOW_DIST) target *= CAR_SLOW_FACTOR;
+  if (obstacleDist < CAR_STOP_DIST) {
+    target = 0;
+    car.debugBrakeReason = "car_ahead";
+  } else if (obstacleDist < CAR_SLOW_DIST) {
+    target *= CAR_SLOW_FACTOR;
+    car.debugBrakeReason = "car_ahead";
+  }
+  car.debugObstacleDist = obstacleDist;
+  car.debugTargetSpeed = target;
+  car.debugRemToEnd = car.junctionPath.length - car.junctionS;
 
   applyAcceleration(car, target, dt);
 
@@ -411,6 +504,9 @@ function updateCarOnJunction(car, dt) {
     }
     car.remove = true;
   }
+  car.waiting = car.speed < 0.2 && car.debugTargetSpeed <= 0.01;
+  car.debugWaitTime = car.waiting ? (car.debugWaitTime || 0) + dt : 0;
+  if (car.waiting) car.debugStoppedTotal = (car.debugStoppedTotal || 0) + dt;
 }
 
 /**
@@ -507,6 +603,7 @@ function rerouteFrom(car, fromNodeId) {
     car.route = route;
     car.laneSeq = laneSeq;
     car.routeStep = -1; // advances to 0 when entering the first junction
+    car.debugReroutes = (car.debugReroutes || 0) + 1;
     return true;
   }
   return false;

@@ -2,6 +2,11 @@ import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
 import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   CONNECTOR_PATH_WIDTH, CONNECTOR_PATH_COLOR, CONNECTOR_PATH_ALPHA,
   DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH, DEBUG_PATH_CONNECTOR_WIDTH,
+  DEBUG_GHOST_SECONDS, DEBUG_GHOST_ALPHA, DEBUG_GHOST_WIDTH,
+  DEBUG_CURRENT_LANE_ALPHA, DEBUG_CURRENT_LANE_WIDTH,
+  DEBUG_INVALID_COLOR, DEBUG_INVALID_ALPHA, DEBUG_INVALID_WIDTH,
+  DEBUG_HEAT_LOW_COLOR, DEBUG_HEAT_HIGH_COLOR, DEBUG_HEAT_ALPHA,
+  DEBUG_TEXT_COLOR, DEBUG_TEXT_BG_COLOR, DEBUG_TEXT_BG_ALPHA, DEBUG_TEXT_SIZE, DEBUG_TEXT_OFFSET_Y,
   CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP, LANE_DIVIDER_WIDTH, STOP_LINE_WIDTH, STOP_LINE_ALPHA,
   GRID_LINE_WIDTH, ROAD_HOVER_STROKE_EXTRA, ROAD_HOVER_ALPHA, LANE_DIVIDER_DASH, LANE_DIVIDER_GAP,
   NODE_STROKE_WIDTH, NODE_STROKE_COLOR, NODE_STROKE_ALPHA,
@@ -171,6 +176,16 @@ function segmentInsetPoints(seg) {
     totalWidth: (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH,
     heading: Math.atan2(dy, dx),
   };
+}
+
+function lerpColorHex(a, b, t) {
+  const clamped = Math.max(0, Math.min(1, t));
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * clamped);
+  const g = Math.round(ag + (bg - ag) * clamped);
+  const bl = Math.round(ab + (bb - ab) * clamped);
+  return (r << 16) | (g << 8) | bl;
 }
 
 /**
@@ -356,6 +371,27 @@ export function drawRoads() {
   if (state.debugLanes) {
     const lineW = DEBUG_PATH_SEGMENT_WIDTH;
     const connectorW = DEBUG_PATH_CONNECTOR_WIDTH;
+    const segLoad = new Map();
+    for (const car of state.cars) {
+      if (car.phase !== "segment") continue;
+      segLoad.set(car.segId, (segLoad.get(car.segId) || 0) + 1);
+    }
+
+    for (const seg of state.segments.values()) {
+      const ip = segmentInsetPoints(seg);
+      if (!ip) continue;
+      const count = segLoad.get(seg.id) || 0;
+      const laneCap = Math.max(1, seg.lanesAtoB + seg.lanesBtoA);
+      const ratio = Math.min(1, count / (laneCap * 2));
+      const heatColor = lerpColorHex(DEBUG_HEAT_LOW_COLOR, DEBUG_HEAT_HIGH_COLOR, ratio);
+      debugTrajectoriesGraphics.moveTo(ip.pA.x, ip.pA.y).lineTo(ip.pB.x, ip.pB.y);
+      debugTrajectoriesGraphics.stroke({
+        width: ip.totalWidth,
+        color: heatColor,
+        alpha: DEBUG_HEAT_ALPHA,
+        pixelLine: false,
+      });
+    }
 
     // 1) Segment lane centerlines: exactly where cars run on segments.
     for (const seg of state.segments.values()) {
@@ -368,6 +404,7 @@ export function drawRoads() {
           width: lineW,
           color: COLORS.debugLane,
           alpha: DEBUG_PATH_ALPHA,
+          pixelLine: true,
         });
       }
       for (let lane = 0; lane < seg.lanesBtoA; lane++) {
@@ -379,6 +416,7 @@ export function drawRoads() {
           width: lineW,
           color: COLORS.debugLane,
           alpha: DEBUG_PATH_ALPHA,
+          pixelLine: true,
         });
       }
     }
@@ -394,6 +432,7 @@ export function drawRoads() {
           width: connectorW,
           color: COLORS.debugLane,
           alpha: DEBUG_PATH_ALPHA,
+          pixelLine: true,
         });
       }
     }
@@ -566,19 +605,191 @@ export function drawSelectedCarRoute() {
   }
 }
 
-export function drawCars() {
-  carsGraphics.clear();
-  for (const car of state.cars) {
-    let p, h;
-    if (car.phase === "junction" && car.junctionPath) {
-      p = pointAtPath(car.junctionPath, car.junctionS);
-      h = headingAtPath(car.junctionPath, car.junctionS);
-    } else {
-      p = pointAtPath(car.path, car.s);
-      h = headingAtPath(car.path, car.s);
+function getCarPose(car) {
+  if (car.phase === "junction" && car.junctionPath) {
+    return {
+      p: pointAtPath(car.junctionPath, car.junctionS),
+      h: headingAtPath(car.junctionPath, car.junctionS),
+      path: car.junctionPath,
+      s: car.junctionS,
+    };
+  }
+  return {
+    p: pointAtPath(car.path, car.s),
+    h: headingAtPath(car.path, car.s),
+    path: car.path,
+    s: car.s,
+  };
+}
+
+function drawPathSlice(g, path, fromS, maxLen, color, width, alpha) {
+  if (!path || !path.points || path.points.length < 2 || maxLen <= 0) return 0;
+  const start = Math.max(0, Math.min(path.length, fromS));
+  const end = Math.max(start, Math.min(path.length, start + maxLen));
+  if (end - start <= 0.05) return 0;
+
+  const pts = [pointAtPath(path, start)];
+  let idx = 0;
+  while (idx < path.cumulative.length && path.cumulative[idx] <= start) idx++;
+  while (idx < path.cumulative.length && path.cumulative[idx] < end) {
+    pts.push(path.points[idx]);
+    idx++;
+  }
+  pts.push(pointAtPath(path, end));
+  if (pts.length < 2) return 0;
+
+  g.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+  g.stroke({ width, color, alpha, pixelLine: true });
+  return end - start;
+}
+
+function getPreviewConnector(nodeId, inSegId, inDir, inLaneIdx, nextStep) {
+  if (nextStep) {
+    const exact = findConnector(
+      nodeId, inSegId, inDir, inLaneIdx,
+      nextStep.segId, nextStep.dir, nextStep.laneIdx
+    );
+    if (exact) return exact;
+    const relaxed = findConnector(
+      nodeId, inSegId, inDir, inLaneIdx,
+      nextStep.segId, nextStep.dir
+    );
+    if (relaxed) return relaxed;
+  }
+  return findConnector(nodeId, inSegId, inDir, inLaneIdx);
+}
+
+function drawDebugFuturePath(g, car, maxLen) {
+  if (!car.laneSeq || maxLen <= 0) return;
+  let remaining = maxLen;
+
+  if (car.phase === "junction" && car.junctionPath) {
+    remaining -= drawPathSlice(
+      g, car.junctionPath, car.junctionS, remaining,
+      COLORS.debugLane, DEBUG_GHOST_WIDTH, DEBUG_GHOST_ALPHA
+    );
+  } else if (car.phase === "segment" && car.path) {
+    remaining -= drawPathSlice(
+      g, car.path, car.s, remaining,
+      COLORS.debugLane, DEBUG_GHOST_WIDTH, DEBUG_GHOST_ALPHA
+    );
+  }
+  if (remaining <= 0) return;
+
+  let inSegId = car.segId;
+  let inDir = car.dir;
+  let inLaneIdx = car.laneIdx;
+  let stepIdx = Math.max(0, car.routeStep + 1);
+
+  while (remaining > 0 && stepIdx < car.laneSeq.length) {
+    const inSeg = state.segments.get(inSegId);
+    const nextStep = car.laneSeq[stepIdx];
+    if (!inSeg || !nextStep) break;
+
+    const nodeId = (inDir === "AtoB") ? inSeg.nodeB : inSeg.nodeA;
+    const conn = getPreviewConnector(nodeId, inSegId, inDir, inLaneIdx, nextStep);
+    if (conn) {
+      remaining -= drawPathSlice(
+        g, conn.path, 0, remaining,
+        COLORS.debugLane, DEBUG_GHOST_WIDTH, DEBUG_GHOST_ALPHA
+      );
+      if (remaining <= 0) break;
     }
 
+    const seg = state.segments.get(nextStep.segId);
+    if (!seg) break;
+    const lanePath = buildLanePath(seg, state.nodes, nextStep.dir, nextStep.laneIdx);
+    remaining -= drawPathSlice(
+      g, lanePath, 0, remaining,
+      COLORS.debugLane, DEBUG_GHOST_WIDTH, DEBUG_GHOST_ALPHA
+    );
+
+    inSegId = nextStep.segId;
+    inDir = nextStep.dir;
+    inLaneIdx = nextStep.laneIdx;
+    stepIdx++;
+  }
+}
+
+function clearDebugCarLabels() {
+  for (const ch of carLabelsContainer.removeChildren()) ch.destroy();
+}
+
+function makeDebugLabel(car) {
+  const sigTimer = (car.debugSignalTimer && car.debugSignalTimer > 0)
+    ? `@${car.debugSignalTimer.toFixed(1)}s`
+    : "";
+  const sig = car.debugSignalGreen == null
+    ? "sig:-"
+    : `sig:${car.debugSignalGreen ? "G" : "R"}${car.debugSignalPhase ? `(${car.debugSignalPhase}${sigTimer})` : ""}`;
+  const conn = car.debugExpectedConnectorId ?? "-";
+  const curConn = car.debugCurrentConnectorId ?? "-";
+  const front = Number.isFinite(car.debugObstacleDist) ? car.debugObstacleDist.toFixed(1) : "inf";
+  const rem = Number.isFinite(car.debugRemToEnd) ? car.debugRemToEnd.toFixed(1) : "-";
+  const stepCur = Math.max(0, (car.routeStep ?? -1) + 1);
+  const stepTotal = car.laneSeq ? car.laneSeq.length : 0;
+  const txt = [
+    `${car.id} ${car.phase} lane:${car.segId}:${car.dir}:${car.laneIdx} step:${stepCur}/${stepTotal}`,
+    `v:${car.speed.toFixed(1)}/${(car.debugTargetSpeed || 0).toFixed(1)} brake:${car.debugBrakeReason}`,
+    `next:${car.debugNextStep || "-"} conn:${conn} cur:${curConn} ok:${car.debugConnExists ? "Y" : "N"} ${sig}`,
+    `dEnd:${rem} dFront:${front} rer:${car.debugReroutes || 0} stop:${(car.debugStoppedTotal || 0).toFixed(1)}s`,
+  ].join("\n");
+
+  const label = new PIXI.Text({
+    text: txt,
+    style: {
+      fontSize: DEBUG_TEXT_SIZE,
+      fill: DEBUG_TEXT_COLOR,
+      fontFamily: "monospace",
+      stroke: DEBUG_TEXT_BG_COLOR,
+      strokeThickness: 3,
+    },
+  });
+  label.anchor.set(0.5, 1);
+  label.alpha = DEBUG_TEXT_BG_ALPHA;
+  return label;
+}
+
+export function drawCars() {
+  carsGraphics.clear();
+  clearDebugCarLabels();
+  for (const car of state.cars) {
+    const pose = getCarPose(car);
+    const p = pose.p;
+    const h = pose.h;
+
     const selected = car.id === state.selectedCarId;
+
+    if (state.debugLanes && pose.path) {
+      drawPathSlice(
+        carsGraphics,
+        pose.path,
+        Math.max(0, pose.s - 10),
+        24,
+        COLORS.debugLane,
+        DEBUG_CURRENT_LANE_WIDTH,
+        DEBUG_CURRENT_LANE_ALPHA
+      );
+      drawDebugFuturePath(carsGraphics, car, Math.max(30, car.speed * DEBUG_GHOST_SECONDS));
+
+      if (car.debugInvalidConnector && car.path?.points?.length > 0) {
+        const end = car.path.points[car.path.points.length - 1];
+        carsGraphics.circle(end.x, end.y, 9);
+        carsGraphics.stroke({
+          width: DEBUG_INVALID_WIDTH,
+          color: DEBUG_INVALID_COLOR,
+          alpha: DEBUG_INVALID_ALPHA,
+          pixelLine: true,
+        });
+      }
+
+      const label = makeDebugLabel(car);
+      label.x = p.x;
+      label.y = p.y - (DEBUG_TEXT_OFFSET_Y / Math.max(0.001, state.view.zoom));
+      label.scale.set(1 / Math.max(0.001, state.view.zoom));
+      carLabelsContainer.addChild(label);
+    }
 
     // Selection glow ring (drawn first, behind the car body)
     if (selected) {

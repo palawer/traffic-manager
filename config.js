@@ -58,6 +58,22 @@ export const DEBUG_PATH_COLOR           = 0x00b7ff; // bright blue
 export const DEBUG_PATH_ALPHA           = 1.0;
 export const DEBUG_PATH_SEGMENT_WIDTH   = 2.2;      // px on screen (pixelLine=true)
 export const DEBUG_PATH_CONNECTOR_WIDTH = 2.6;      // px on screen (pixelLine=true)
+export const DEBUG_GHOST_SECONDS        = 2.5;      // seconds ahead to preview per car
+export const DEBUG_GHOST_ALPHA          = 0.7;
+export const DEBUG_GHOST_WIDTH          = 2.2;
+export const DEBUG_CURRENT_LANE_ALPHA   = 0.9;
+export const DEBUG_CURRENT_LANE_WIDTH   = 3.0;
+export const DEBUG_INVALID_COLOR        = 0xff3b30;
+export const DEBUG_INVALID_ALPHA        = 0.95;
+export const DEBUG_INVALID_WIDTH        = 2.4;
+export const DEBUG_HEAT_LOW_COLOR       = 0x35c759;
+export const DEBUG_HEAT_HIGH_COLOR      = 0xff453a;
+export const DEBUG_HEAT_ALPHA           = 0.18;
+export const DEBUG_TEXT_COLOR           = 0xffffff;
+export const DEBUG_TEXT_BG_COLOR        = 0x10141a;
+export const DEBUG_TEXT_BG_ALPHA        = 0.82;
+export const DEBUG_TEXT_SIZE            = 11;
+export const DEBUG_TEXT_OFFSET_Y        = 20;
 
 // ── Render style (canvas overlays / symbols) ─────────────────────────────────
 export const GRID_LINE_WIDTH = 1;
