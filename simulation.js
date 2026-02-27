@@ -217,13 +217,24 @@ function updateCarOnSegment(car, dt) {
         // Relax only lane matching, keep the same target segment+direction.
         conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
       }
+      if (!conn && nextStep) {
+        // Planned transition no longer exists from this incoming lane.
+        // Re-route now (before reaching stop line), then retry connector lookup.
+        if (rerouteFrom(car, destNodeId)) {
+          nextStep = car.laneSeq[car.routeStep + 1];
+          if (nextStep) {
+            conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
+              || findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
+          }
+        }
+      }
       if (conn) {
         if (!isConnectorGreen(conn) || isJunctionBlocked(conn)) {
           target = 0;
           stopBeforeLineS = stopLineHoldS;
         }
       } else {
-        if (remToEnd < JUNCTION_STOP_DIST) target = 0;
+        target = 0;
         stopBeforeLineS = stopLineHoldS;
       }
     }
@@ -483,7 +494,14 @@ function rerouteFrom(car, fromNodeId) {
       firstStep.segId,
       firstStep.dir,
       firstStep.laneIdx
-    ) || findConnector(fromNodeId, car.segId, car.dir, car.laneIdx);
+    ) || findConnector(
+      fromNodeId,
+      car.segId,
+      car.dir,
+      car.laneIdx,
+      firstStep.segId,
+      firstStep.dir
+    );
     if (!conn) continue;
     car.route = route;
     car.laneSeq = laneSeq;
