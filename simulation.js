@@ -37,7 +37,7 @@ export function updateSignals(dt) {
   state.signalTime += dt;
   for (const signal of state.signals.values()) {
     signal.phaseTimer -= dt;
-    if (signal.phaseTimer <= 0) {
+    if (signal.phaseTimer <= 0 && signal.phases.length > 0) {
       signal.currentPhase = (signal.currentPhase + 1) % signal.phases.length;
       signal.phaseTimer = signal.phases[signal.currentPhase].duration;
     }

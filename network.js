@@ -2,6 +2,13 @@ import { state } from "./state.js";
 import { buildJunction } from "./junction.js";
 import { saveState } from "./persistence.js";
 
+/** Remove laneArrow entries that reference a deleted segment */
+function pruneLaneArrowsForSeg(segId) {
+  for (const key of state.laneArrows.keys()) {
+    if (parseInt(key.split(":")[0]) === segId) state.laneArrows.delete(key);
+  }
+}
+
 /** Remove userConnector entries that reference a deleted segment */
 function pruneUserConnectorsForSeg(segId) {
   for (const [nodeId, nodeMap] of state.userConnectors) {
@@ -29,11 +36,13 @@ export function addNode(x, y) {
 export function removeNode(nodeId) {
   state.nodes.delete(nodeId);
   state.junctions.delete(nodeId);
+  state.signals.delete(nodeId);
   state.userConnectors.delete(nodeId);
   // Remove all segments connected to this node
   for (const [segId, seg] of state.segments) {
     if (seg.nodeA === nodeId || seg.nodeB === nodeId) {
       state.segments.delete(segId);
+      pruneLaneArrowsForSeg(segId);
       pruneUserConnectorsForSeg(segId);
       const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
       state.junctions.delete(otherId);
@@ -60,6 +69,7 @@ export function removeSegment(segId) {
   const seg = state.segments.get(segId);
   if (!seg) return;
   state.segments.delete(segId);
+  pruneLaneArrowsForSeg(segId);
   pruneUserConnectorsForSeg(segId);
   state.junctions.delete(seg.nodeA);
   state.junctions.delete(seg.nodeB);

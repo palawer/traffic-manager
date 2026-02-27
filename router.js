@@ -141,8 +141,8 @@ export function routeToLaneSequence(routeNodeIds) {
           const outHeading = Math.atan2(nextNode.y - toNode.y, nextNode.x - toNode.x);
           const diff = normalizeAngle(outHeading - inHeading);
           if (Math.abs(diff) < STRAIGHT_THRESHOLD) nextTurnType = "straight";
-          else if (diff > 0) nextTurnType = "left";
-          else nextTurnType = "right";
+          else if (diff > 0) nextTurnType = "right";
+          else nextTurnType = "left";
         }
       }
     }

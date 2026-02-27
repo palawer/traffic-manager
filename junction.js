@@ -9,8 +9,8 @@ import { STRAIGHT_THRESHOLD } from "./config.js";
 function classifyTurn(inHeading, outHeading) {
   const diff = normalizeAngle(outHeading - inHeading);
   if (Math.abs(diff) < STRAIGHT_THRESHOLD) return "straight";
-  if (diff > 0) return "left";
-  return "right";
+  if (diff > 0) return "right";
+  return "left";
 }
 
 /**
