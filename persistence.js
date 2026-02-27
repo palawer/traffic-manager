@@ -1,6 +1,6 @@
 import { state } from "./state.js";
 
-const KEY = "rotonda_v1";
+const KEY = "traffic_manager_v1";
 
 export function saveState() {
   try {

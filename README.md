@@ -1,37 +1,27 @@
-# Rotonda Lab (prototipo)
+# Traffic Manager
 
-Prototipo de juego/simulador en navegador con canvas infinito para construir redes de carreteras con:
+Simulador de tráfico en navegador con canvas infinito para construir redes de carreteras al estilo Cities Skylines / TMPE.
 
-- Rectas
-- Curvas de 90º
-- Rotondas de 3 tamaños (S/M/L)
+## Características
 
-Incluye simulación siempre activa con coches que:
-
-- Entran por conexiones abiertas
-- Recorren la red conectada
-- Mantienen distancia de seguridad básica
-- Ceden el paso al entrar en rotondas (regla simplificada)
+- Grafo nodo-segmento: carreteras de cualquier ángulo entre nodos
+- Carriles multi-dirección (AtoB / BtoA) con tráfico por la derecha
+- Conectores de carril personalizables (TMPE) y flechas de carril
+- Semáforos con fases programables
+- Pathfinding A* con selección de carril por giro planificado
+- Car-following con distancia mínima y colisiones con explosión
 
 ## Ejecutar
 
-Abre `index.html` en tu navegador o usa un servidor local.
+Abre `index.html` en un servidor local (o usa Live Server en VS Code).
 
-PixiJS se carga desde `./pixi.min.js` en el propio proyecto.
+PixiJS se carga desde `./pixi.min.js` incluido en el proyecto.
 
 ## Controles
 
-- `Seleccionar`: seleccionar/mover piezas
-- `Recta`, `Curva`, `Rotonda`: modo colocación
-- Click en canvas: colocar pieza activa
-- `R` en modo colocación: rotar pieza a colocar 90º
-- `R` en modo selección: rotar pieza seleccionada 90º
-- `Supr`: borrar pieza seleccionada
-- Rueda: zoom
-- `Espacio + arrastre`: mover cámara
-- `Spawn coche`: añade un coche manualmente
-
-## Notas
-
-- Es un MVP: la lógica de tráfico está simplificada.
-- Si cambias la red, se reinician los coches para recalcular rutas.
+- `N` — herramienta nodo: click para colocar, arrastrar para mover
+- `R` — herramienta carretera: click en dos nodos para conectarlos
+- `S` — selección: click en nodo/segmento, `Supr` para borrar
+- `Esc` — cancelar acción en curso
+- Rueda — zoom
+- `Espacio + arrastre` — mover cámara
