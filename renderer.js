@@ -214,18 +214,6 @@ export function drawRoads() {
       junctionGraphics.fill(COLORS.junction);
     }
 
-    // Worn asphalt marks: dark streaks along connector paths, opacity by usage
-    for (const conn of junc.connectors) {
-      const wk = `${conn.nodeId}:${conn.inSegId}:${conn.inDir}:${conn.inLane}:${conn.outSegId}:${conn.outDir}:${conn.outLane}`;
-      const wear = state.connectorWear.get(wk) ?? 0;
-      if (wear === 0) continue;
-      const alpha = Math.min(wear / 40, 1) * 0.52;
-      const pts = conn.path.points;
-      if (pts.length < 2) continue;
-      junctionGraphics.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) junctionGraphics.lineTo(pts[i].x, pts[i].y);
-      junctionGraphics.stroke({ width: LANE_WIDTH * 0.72, color: 0x111316, alpha, cap: "round", join: "round" });
-    }
   }
 
   // Draw segment bodies
@@ -284,6 +272,21 @@ export function drawRoads() {
     // Stop lines at each end
     drawStopLine(laneMarkingsGraphics, pA, nx, ny, halfW, lw * 2);
     drawStopLine(laneMarkingsGraphics, pB, nx, ny, halfW, lw * 2);
+  }
+
+  // Worn asphalt: grey lines along heavily-used connector paths
+  for (const [, junc] of state.junctions) {
+    for (const conn of junc.connectors) {
+      const wk = `${conn.nodeId}:${conn.inSegId}:${conn.inDir}:${conn.inLane}:${conn.outSegId}:${conn.outDir}:${conn.outLane}`;
+      const wear = state.connectorWear.get(wk) ?? 0;
+      if (wear === 0) continue;
+      const alpha = Math.min(wear / 40, 1) * 0.7;
+      const pts = conn.path.points;
+      if (pts.length < 2) continue;
+      laneMarkingsGraphics.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) laneMarkingsGraphics.lineTo(pts[i].x, pts[i].y);
+      laneMarkingsGraphics.stroke({ width: lw * 3, color: 0x888888, alpha });
+    }
   }
 
   // Debug: draw connector paths
