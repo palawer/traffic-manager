@@ -35,6 +35,7 @@ let debugTrajectoriesGraphics = null;
 let tmpeOverlayGraphics = null;
 let connectorOverlayGraphics = null;
 let routeGraphics = null;
+let routePinGraphics = null;
 let signalGraphics = null;
 let nodeGraphics = null;
 let previewGraphics = null;
@@ -64,6 +65,7 @@ export async function initRenderer() {
   tmpeOverlayGraphics  = new PIXI.Graphics();
   connectorOverlayGraphics = new PIXI.Graphics();
   routeGraphics        = new PIXI.Graphics();
+  routePinGraphics     = new PIXI.Graphics();
   signalGraphics       = new PIXI.Graphics();
   nodeGraphics       = new PIXI.Graphics();
   previewGraphics    = new PIXI.Graphics();
@@ -87,6 +89,7 @@ export async function initRenderer() {
   camera.addChild(carsGraphics);
   camera.addChild(explosionGraphics);
   camera.addChild(carLabelsContainer);
+  camera.addChild(routePinGraphics);
   app.stage.addChild(camera);
 
   return { app };
@@ -226,6 +229,13 @@ export function drawRoads() {
 
   // Draw junctions
   for (const [nodeId, junc] of state.junctions) {
+    const segsAtNode = getNodeSegments(nodeId);
+    if (segsAtNode.length === 2) {
+      // Use dedicated bend fill for 2-road nodes so the join follows smooth arcs
+      // instead of closing with a diagonal polygon edge.
+      drawBendJunction(junctionGraphics, nodeId, segsAtNode);
+      continue;
+    }
     if (junc.polygon && junc.polygon.length >= 3) {
       // Use the computed junction outline for both bends and intersections.
       // This keeps both sides consistent and follows connector geometry.
@@ -451,6 +461,7 @@ export function drawPreview() {
 
 export function drawSelectedCarRoute() {
   routeGraphics.clear();
+  routePinGraphics.clear();
   if (state.selectedCarId === null) return;
   const car = state.cars.find(c => c.id === state.selectedCarId);
   if (!car) { state.selectedCarId = null; return; }
@@ -533,29 +544,18 @@ export function drawSelectedCarRoute() {
     const destNode = state.nodes.get(car.route[car.route.length - 1]);
     if (destNode) {
       const pinR  = ROUTE_PIN_RADIUS;
-      const tipY  = destNode.y + pinR * 1.6;  // tip of the teardrop
-
       // Shadow
-      routeGraphics.circle(destNode.x, destNode.y - pinR * 0.1, pinR * 1.1);
-      routeGraphics.fill({ color: NODE_STROKE_COLOR, alpha: ROUTE_PIN_SHADOW_ALPHA });
+      routePinGraphics.circle(destNode.x, destNode.y, pinR * 1.1);
+      routePinGraphics.fill({ color: NODE_STROKE_COLOR, alpha: ROUTE_PIN_SHADOW_ALPHA });
 
-      // Teardrop body (circle + downward triangle)
-      routeGraphics.circle(destNode.x, destNode.y - pinR, pinR);
-      routeGraphics.fill({ color, alpha: ROUTE_PIN_FILL_ALPHA });
-      routeGraphics.poly([
-        destNode.x, tipY,
-        destNode.x - pinR * 0.65, destNode.y - pinR * 0.3,
-        destNode.x + pinR * 0.65, destNode.y - pinR * 0.3,
-      ]);
-      routeGraphics.fill({ color, alpha: ROUTE_PIN_FILL_ALPHA });
+      // Main circle
+      routePinGraphics.circle(destNode.x, destNode.y, pinR);
+      routePinGraphics.fill({ color, alpha: ROUTE_PIN_FILL_ALPHA });
+      routePinGraphics.stroke({ width: ROUTE_PIN_BORDER_WIDTH, color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_BORDER_ALPHA });
 
-      // White border
-      routeGraphics.circle(destNode.x, destNode.y - pinR, pinR);
-      routeGraphics.stroke({ width: ROUTE_PIN_BORDER_WIDTH, color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_BORDER_ALPHA });
-
-      // White inner dot
-      routeGraphics.circle(destNode.x, destNode.y - pinR, pinR * 0.35);
-      routeGraphics.fill({ color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_DOT_ALPHA });
+      // Inner dot
+      routePinGraphics.circle(destNode.x, destNode.y, pinR * 0.35);
+      routePinGraphics.fill({ color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_DOT_ALPHA });
     }
   }
 }
