@@ -386,7 +386,7 @@ export function drawSelectedCarRoute() {
   const nextStepIdx = car.routeStep + 1;
 
   // 2. Connector from current segment to next step (segment phase only)
-  if (car.phase === "segment" && nextStepIdx < car.laneSeq.length) {
+  if (car.phase === "segment" && car.routeStep >= 0 && nextStepIdx < car.laneSeq.length) {
     const currStep = car.laneSeq[car.routeStep];
     const nextStep = car.laneSeq[nextStepIdx];
     const seg = state.segments.get(currStep.segId);
