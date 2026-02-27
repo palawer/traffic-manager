@@ -105,14 +105,18 @@ export function markNetworkDirty() {
 export function findConnector(nodeId, inSegId, inDir, inLane, outSegId, outDir, outLane) {
   const junc = state.junctions.get(nodeId);
   if (!junc) return null;
-  let fallback = null;
+  let sameSegFallback = null;
   for (const conn of junc.connectors) {
     if (conn.inSegId !== inSegId || conn.inDir !== inDir || conn.inLane !== inLane) continue;
-    if (outSegId === undefined) return conn; // first match
-    if (conn.outSegId === outSegId && conn.outDir === outDir && conn.outLane === outLane) return conn;
-    if (!fallback) fallback = conn; // keep first as fallback
+    if (outSegId === undefined) return conn; // no filter — first match
+    if (conn.outSegId === outSegId && conn.outDir === outDir) {
+      if (outLane === undefined || conn.outLane === outLane) return conn; // exact match
+      if (!sameSegFallback) sameSegFallback = conn; // same road, different lane
+    }
   }
-  return fallback; // best effort if exact match not found
+  // Only fall back to a connector that goes to the correct outSeg.
+  // Never return a connector that sends the car to the wrong segment.
+  return sameSegFallback;
 }
 
 /**

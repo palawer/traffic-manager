@@ -4,7 +4,7 @@
  */
 
 // ── Road geometry ─────────────────────────────────────────────────────────────
-export const LANE_WIDTH      = 12;   // width of one lane in world pixels
+export const LANE_WIDTH      = 14;   // width of one lane in world pixels
 export const GRID            = 20;   // editor snap grid
 export const NODE_SNAP_DIST  = 20;   // px to auto-snap to an existing node
 
