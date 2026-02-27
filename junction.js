@@ -91,17 +91,18 @@ export function collectLaneEndpoints(nodeId, nodes, segsAtNode) {
 
 /**
  * Build polygon for the junction area (for rendering).
+ * The gap between adjacent road stop-lines is filled with a bezier arc
+ * that uses the same headings as the outermost (lane-0) connector between
+ * those two roads — so the junction outline follows the connector curves.
  */
 function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
   const node = nodes.get(nodeId);
   if (!node || segsAtNode.length < 2) return [];
 
-  const corners = [];
-
-  for (const seg of segsAtNode) {
+  const segs = segsAtNode.map(seg => {
     const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
     const other = nodes.get(otherId);
-    if (!other) continue;
+    if (!other) return null;
 
     const angle = Math.atan2(other.y - node.y, other.x - node.x);
     const half  = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH / 2;
@@ -112,16 +113,40 @@ function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
     const perpX = -Math.sin(angle);
     const perpY =  Math.cos(angle);
 
-    corners.push({ x: stopX - perpX * half, y: stopY - perpY * half });
-    corners.push({ x: stopX + perpX * half, y: stopY + perpY * half });
+    const minus = { x: stopX - perpX * half, y: stopY - perpY * half };
+    const plus  = { x: stopX + perpX * half, y: stopY + perpY * half };
+    return { angle, minus, plus };
+  }).filter(Boolean);
+
+  segs.sort((a, b) => a.angle - b.angle);
+
+  // For each pair of adjacent roads, the arc from plus_i → minus_{i+1} uses the
+  // same headings as the outermost right-turn connector between those roads:
+  //   fromEp.heading = arrival heading of road[i]   = angle_i + π  (toward node)
+  //   toEp.heading   = departure heading of road[i+1] = angle_{i+1} (away from node)
+  // Only apply the bezier for small angular gaps (< π). Large gaps (inside of bends,
+  // back of T-junctions) stay as straight lines to avoid looping arcs.
+  const pts = [];
+  for (let i = 0; i < segs.length; i++) {
+    const curr = segs[i];
+    const next = segs[(i + 1) % segs.length];
+
+    pts.push(curr.minus);
+    pts.push(curr.plus);
+
+    let gap = next.angle - curr.angle;
+    if (gap <= 0) gap += 2 * Math.PI;
+
+    if (gap < Math.PI) {
+      const fromEp = { x: curr.plus.x,  y: curr.plus.y,  heading: curr.angle + Math.PI };
+      const toEp   = { x: next.minus.x, y: next.minus.y, heading: next.angle };
+      const arc = buildConnectorBezier(fromEp, toEp);
+      for (let j = 1; j < arc.length; j++) pts.push(arc[j]);
+    }
+    // else: straight line from curr.plus to next.minus (implicit via polygon draw)
   }
 
-  corners.sort((a, b) =>
-    Math.atan2(a.y - node.y, a.x - node.x) -
-    Math.atan2(b.y - node.y, b.x - node.x)
-  );
-
-  return corners;
+  return pts;
 }
 
 /**
