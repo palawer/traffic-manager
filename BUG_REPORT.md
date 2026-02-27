@@ -1,32 +1,37 @@
-# Informe de Bugs (Revisión Completa)
+# Informe de Bugs (Estado Actualizado)
 
-## Hallazgos (priorizados)
+## Pendientes
 
-1. **La simulación no es “siempre activa” (regresión funcional)**
-- Hay lógica de pausa activa en runtime: en [main.js:43](/Users/guillem/repos/rotonda/main.js:43) se deja de simular cuando `state.paused` es `true`.
-- El botón de pausa sigue existiendo y muta ese estado en [renderer.js:676](/Users/guillem/repos/rotonda/renderer.js:676) y también por teclado `P` en [editor.js:576](/Users/guillem/repos/rotonda/editor.js:576).
-- UI aún lo expone en [index.html:95](/Users/guillem/repos/rotonda/index.html:95).
+1. **La simulación no es “siempre activa”**
+- Sigue habiendo pausa en runtime: [main.js:43](/Users/guillem/repos/rotonda/main.js:43), [renderer.js:676](/Users/guillem/repos/rotonda/renderer.js:676), [editor.js:576](/Users/guillem/repos/rotonda/editor.js:576), [index.html:95](/Users/guillem/repos/rotonda/index.html:95).
 
-2. **Cambiar velocidad con la herramienta `speed` no se guarda en persistencia**
-- En el flujo de click de `speed` se modifica `seg.speedLimit` pero no se llama a `saveState()` ([editor.js:367](/Users/guillem/repos/rotonda/editor.js:367) a [editor.js:378](/Users/guillem/repos/rotonda/editor.js:378)).
-- Resultado: recargas la página y se pierden esos cambios.
+2. **Escrituras masivas a `localStorage` durante edición (riesgo de tirones)**
+- `rebuildJunctions()` persiste siempre: [network.js:103](/Users/guillem/repos/rotonda/network.js:103).
+- Durante drag de nodos se marca `networkDirty` continuamente: [editor.js:499](/Users/guillem/repos/rotonda/editor.js:499).
+- El render puede reconstruir junctions en cada frame: [renderer.js:217](/Users/guillem/repos/rotonda/renderer.js:217).
 
-3. **Escrituras masivas a `localStorage` durante edición (riesgo de tirones)**
-- `rebuildJunctions()` siempre hace `saveState()` ([network.js:89](/Users/guillem/repos/rotonda/network.js:89) y [network.js:103](/Users/guillem/repos/rotonda/network.js:103)).
-- Mientras arrastras nodos, se marca `networkDirty` continuamente ([editor.js:498](/Users/guillem/repos/rotonda/editor.js:498)).
-- Cada frame de render llama `drawRoads()`, que puede reconstruir junctions ([renderer.js:217](/Users/guillem/repos/rotonda/renderer.js:217)).
-- Esto puede provocar mucha E/S síncrona en navegador.
+3. **Cola de spawn puede quedarse atascada**
+- Si no hay rutas válidas, la cola pendiente puede no vaciarse y seguir intentando cada frame: [simulation.js:147](/Users/guillem/repos/rotonda/simulation.js:147).
 
-4. **En extremos sin salida, los coches se eliminan en vez de “dar la vuelta”**
-- Si no hay conector válido al llegar al final, se elimina el coche ([simulation.js:247](/Users/guillem/repos/rotonda/simulation.js:247), [simulation.js:313](/Users/guillem/repos/rotonda/simulation.js:313)).
-- Además se prohíben U-turns por defecto en junctions ([junction.js:168](/Users/guillem/repos/rotonda/junction.js:168)).
-- Comportamiento observado: desaparición en dead-ends.
+## Resueltos recientemente
 
-5. **Cola de spawn puede quedarse “atascada” indefinidamente**
-- Si `state.pendingSpawns > 0` y no hay rutas válidas, no se consume la cola (solo se limpia si `nodes.size < 2`) en [simulation.js:147](/Users/guillem/repos/rotonda/simulation.js:147) a [simulation.js:154](/Users/guillem/repos/rotonda/simulation.js:154).
-- Efecto: intentos fallidos cada frame y contador creciendo sin salida.
+1. **Persistencia de herramienta `speed`**
+- Añadido `saveState()` tras cambiar `seg.speedLimit` en [editor.js:376](/Users/guillem/repos/rotonda/editor.js:376).
+- Commit: `d6a7ada`.
 
-6. **Inconsistencia UI inicial del botón Debug**
-- Estado inicial real: `debugLanes: false` en [state.js:78](/Users/guillem/repos/rotonda/state.js:78).
-- HTML arranca mostrando `Debug: ON` y clase activa en [index.html:97](/Users/guillem/repos/rotonda/index.html:97).
-- Luego JS lo corrige, pero hay desalineación inicial.
+2. **Parada sobre línea de stop**
+- Añadido margen configurable antes de línea de stop (`STOP_LINE_CLEARANCE`) en [config.js:168](/Users/guillem/repos/rotonda/config.js:168) y aplicado en [simulation.js:162](/Users/guillem/repos/rotonda/simulation.js:162).
+- Commit relacionado: `8c5e699`.
+
+3. **Coches bloqueados al volver semáforo a verde**
+- Fallback de conector en lookahead para evitar bloqueo por matching demasiado estricto: [simulation.js:188](/Users/guillem/repos/rotonda/simulation.js:188).
+- Commit: `38a70c6`.
+
+4. **Rutas rotas con conectores de usuario y U-turn inválido en cruces**
+- Selección de carril ahora valida conectores reales: [router.js:113](/Users/guillem/repos/rotonda/router.js:113).
+- Prohibido U-turn inmediato en intersección: [router.js:147](/Users/guillem/repos/rotonda/router.js:147), [simulation.js:456](/Users/guillem/repos/rotonda/simulation.js:456).
+- Commit: `9e88511`.
+
+5. **Inconsistencia inicial del botón Debug**
+- Alineado estado inicial de UI con el estado real (`debugLanes: false`):
+  [index.html:97](/Users/guillem/repos/rotonda/index.html:97) ahora arranca como `Debug: OFF` sin clase activa.
