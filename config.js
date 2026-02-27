@@ -4,7 +4,7 @@
  */
 
 // ── Road geometry ─────────────────────────────────────────────────────────────
-export const LANE_WIDTH      = 22;   // width of one lane in world pixels
+export const LANE_WIDTH      = 12;   // width of one lane in world pixels
 export const GRID            = 20;   // editor snap grid
 export const NODE_SNAP_DIST  = 20;   // px to auto-snap to an existing node
 
@@ -61,3 +61,9 @@ export const ZOOM_MAX         = 4.0;
 export const DEFAULT_SPEED_LIMIT = 80;
 export const SPEED_PRESETS       = [30, 50, 80, 120]; // cycling order
 export const MAX_LANES           = 4;  // max lanes per direction in the property panel
+
+// ── Collisions & explosions ────────────────────────────────────────────────────
+export const CRASH_DIST          = 12;   // px — cars closer than this collide
+export const EXPLOSION_DURATION  = 0.6;  // seconds the effect lasts
+export const EXPLOSION_SPARKS    = 8;    // number of spark lines
+export const EXPLOSION_MAX_RADIUS = 28;  // px — outer radius of ring at end

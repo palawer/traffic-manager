@@ -5,6 +5,7 @@ import {
   CAR_ACCEL, CAR_BRAKE,
   CAR_STOP_DIST, CAR_SLOW_DIST, CAR_SLOW_FACTOR,
   JUNCTION_LOOKAHEAD, JUNCTION_STOP_DIST, JUNCTION_ENTRY_THRESHOLD,
+  CRASH_DIST, EXPLOSION_DURATION, EXPLOSION_SPARKS,
 } from "./config.js";
 import { pointAtPath, headingAtPath, hslToHex } from "./geometry.js";
 import { rebuildJunctions, getNodeSegments, findConnector, getDestinationNode } from "./network.js";
@@ -139,6 +140,7 @@ export function updateCars(dt) {
     }
   }
 
+  checkCarCollisions();
   state.cars = state.cars.filter(c => !c.remove);
 
   // Spawn pending cars
@@ -197,7 +199,15 @@ function updateCarOnSegment(car, dt) {
 
   applyAcceleration(car, target, dt);
 
-  car.s += car.speed * dt;
+  // Hard-clamp: never get within CAR_STOP_DIST of any car ahead in the same lane
+  let advance = car.speed * dt;
+  for (const other of state.cars) {
+    if (other === car || other.phase !== "segment") continue;
+    if (other.segId !== car.segId || other.dir !== car.dir || other.laneIdx !== car.laneIdx) continue;
+    if (other.s <= car.s) continue;
+    advance = Math.min(advance, Math.max(0, other.s - car.s - CAR_STOP_DIST));
+  }
+  car.s += advance;
 
   if (car.s >= car.path.length) {
     car.s = car.path.length;
@@ -219,6 +229,7 @@ function updateCarOnSegment(car, dt) {
       // Wait at stop line
       car.s = car.path.length - 1;
       car.speed = 0;
+      car.joinGrace = JOIN_GRACE_TIME; // prevent false crash when cars queue here
     } else {
       // Dead end or last step — remove car
       car.remove = true;
@@ -253,7 +264,16 @@ function updateCarOnJunction(car, dt) {
   else if (obstacleDist < CAR_SLOW_DIST) target *= CAR_SLOW_FACTOR;
 
   applyAcceleration(car, target, dt);
-  car.junctionS += car.speed * dt;
+
+  // Hard-clamp: never get within CAR_STOP_DIST of a car ahead on the same connector
+  let jAdvance = car.speed * dt;
+  for (const other of state.cars) {
+    if (other === car || other.phase !== "junction") continue;
+    if (other.connectorId !== car.connectorId) continue;
+    if (other.junctionS <= car.junctionS) continue;
+    jAdvance = Math.min(jAdvance, Math.max(0, other.junctionS - car.junctionS - CAR_STOP_DIST));
+  }
+  car.junctionS += jAdvance;
 
   if (car.junctionS >= car.junctionPath.length) {
     // Exited junction — move to next segment
@@ -336,4 +356,41 @@ function applyAcceleration(car, target, dt) {
   const delta = target - car.speed;
   const step = Math.sign(delta) * Math.min(Math.abs(delta), accel * dt);
   car.speed = Math.max(0, car.speed + step);
+}
+
+function getCarWorldPos(car) {
+  if (car.phase === "junction" && car.junctionPath)
+    return pointAtPath(car.junctionPath, Math.min(car.junctionS, car.junctionPath.length - 0.01));
+  if (car.path)
+    return pointAtPath(car.path, Math.min(car.s, car.path.length - 0.01));
+  return null;
+}
+
+function checkCarCollisions() {
+  for (let i = 0; i < state.cars.length; i++) {
+    const a = state.cars[i];
+    if (a.remove || a.joinGrace > 0) continue;
+    for (let j = i + 1; j < state.cars.length; j++) {
+      const b = state.cars[j];
+      if (b.remove || b.joinGrace > 0) continue;
+      // Same lane same direction: handled by car-following, skip
+      if (a.phase === "segment" && b.phase === "segment" &&
+          a.segId === b.segId && a.dir === b.dir && a.laneIdx === b.laneIdx) continue;
+      const pa = getCarWorldPos(a);
+      const pb = getCarWorldPos(b);
+      if (!pa || !pb) continue;
+      if (Math.hypot(pa.x - pb.x, pa.y - pb.y) < CRASH_DIST) {
+        a.remove = true;
+        b.remove = true;
+        state.crashes++;
+        const cx = (pa.x + pb.x) / 2;
+        const cy = (pa.y + pb.y) / 2;
+        const sparkAngles = Array.from(
+          { length: EXPLOSION_SPARKS },
+          (_, k) => k * (2 * Math.PI / EXPLOSION_SPARKS) + (Math.random() - 0.5) * 0.5
+        );
+        state.explosions.push({ x: cx, y: cy, age: 0, duration: EXPLOSION_DURATION, sparkAngles });
+      }
+    }
+  }
 }

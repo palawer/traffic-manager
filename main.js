@@ -10,6 +10,7 @@ import {
   drawRoads,
   drawPreview,
   drawCars,
+  drawExplosions,
   drawSelectedCarRoute,
   drawLaneArrows,
   drawConnectorTool,
@@ -52,4 +53,5 @@ function frame(dt) {
   drawSignals();
   drawSpeedLabels();
   drawCars();
+  drawExplosions(dt);
 }

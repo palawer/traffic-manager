@@ -155,6 +155,17 @@ ul {
   font-size: 0.92rem;
 }
 
+.crash-count {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(223, 63, 63, 0.18);
+  border: 1px solid rgba(223, 63, 63, 0.35);
+  color: #ff7e7e;
+  font-size: 0.88rem;
+  font-weight: bold;
+}
+
 .stage {
   flex: 1;
   position: relative;

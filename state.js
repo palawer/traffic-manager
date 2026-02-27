@@ -39,6 +39,8 @@ export const state = {
   userConnectors: new Map(), // nodeId → Map<inKey, Set<outKey>>  "segId:dir:laneIdx"
   cars: [],
   pendingSpawns: 0,
+  crashes: 0,
+  explosions: [],   // [{ x, y, age, duration, sparkAngles }]
   networkDirty: true,
   // editor
   tool: "segment",           // "select" | "segment"

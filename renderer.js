@@ -1,5 +1,5 @@
 import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
-import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH } from "./config.js";
+import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
@@ -19,6 +19,7 @@ let signalGraphics = null;
 let nodeGraphics = null;
 let previewGraphics = null;
 let carsGraphics = null;
+let explosionGraphics = null;
 let carLabelsContainer = null;
 let speedLabelsContainer = null;
 
@@ -46,6 +47,7 @@ export async function initRenderer() {
   nodeGraphics       = new PIXI.Graphics();
   previewGraphics    = new PIXI.Graphics();
   carsGraphics       = new PIXI.Graphics();
+  explosionGraphics  = new PIXI.Graphics();
   carLabelsContainer = new PIXI.Container();
   speedLabelsContainer = new PIXI.Container();
 
@@ -61,6 +63,7 @@ export async function initRenderer() {
   camera.addChild(nodeGraphics);
   camera.addChild(previewGraphics);
   camera.addChild(carsGraphics);
+  camera.addChild(explosionGraphics);
   camera.addChild(carLabelsContainer);
   app.stage.addChild(camera);
 
@@ -447,6 +450,46 @@ export function drawCars() {
   }
 }
 
+export function drawExplosions(dt) {
+  explosionGraphics.clear();
+  state.explosions = state.explosions.filter(ex => {
+    ex.age += dt;
+    if (ex.age >= ex.duration) return false;
+
+    const t = ex.age / ex.duration;          // 0 → 1
+    const easeOut = 1 - (1 - t) * (1 - t);  // ease-out quad
+
+    // Expanding ring: orange → transparent
+    const ringRadius = EXPLOSION_MAX_RADIUS * easeOut;
+    const ringAlpha  = (1 - t) * 0.9;
+    const ringWidth  = (1 - t) * 6 + 1;
+    const ringColor  = t < 0.4 ? 0xffdd00 : 0xff6600;
+    explosionGraphics.circle(ex.x, ex.y, ringRadius);
+    explosionGraphics.stroke({ color: ringColor, width: ringWidth, alpha: ringAlpha });
+
+    // Inner flash (first 30% only)
+    if (t < 0.3) {
+      const flashAlpha = (1 - t / 0.3) * 0.6;
+      explosionGraphics.circle(ex.x, ex.y, ringRadius * 0.55);
+      explosionGraphics.fill({ color: 0xffffff, alpha: flashAlpha });
+    }
+
+    // Sparks
+    const sparkLen  = EXPLOSION_MAX_RADIUS * 1.1 * easeOut;
+    const sparkAlpha = (1 - t) * 0.85;
+    for (const angle of ex.sparkAngles) {
+      const x1 = ex.x + Math.cos(angle) * ringRadius * 0.4;
+      const y1 = ex.y + Math.sin(angle) * ringRadius * 0.4;
+      const x2 = ex.x + Math.cos(angle) * sparkLen;
+      const y2 = ex.y + Math.sin(angle) * sparkLen;
+      explosionGraphics.moveTo(x1, y1).lineTo(x2, y2);
+      explosionGraphics.stroke({ color: 0xffaa00, width: 1.5, alpha: sparkAlpha });
+    }
+
+    return true;
+  });
+}
+
 export function updatePropertiesPanel() {
   const panel = document.getElementById("propertiesPanel");
   const seg = state.selectedSegId !== null ? state.segments.get(state.selectedSegId) : null;
@@ -465,6 +508,8 @@ export function updateStatus() {
   const statusEl = document.getElementById("status");
   const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad", arrow: "Flechas", signal: "Semáforos" }[state.tool] || state.tool;
   statusEl.textContent = `Herramienta: ${toolName} · Nodos: ${state.nodes.size} · Segmentos: ${state.segments.size} · Coches: ${state.cars.length}`;
+  const crashEl = document.getElementById("crashCount");
+  if (crashEl) crashEl.textContent = `Siniestros: ${state.crashes}`;
 }
 
 export function updateSpawnButtonLabel() {
@@ -521,6 +566,7 @@ export function setupUi() {
 
   clearCarsBtn.addEventListener("click", () => {
     state.cars = [];
+    state.explosions = [];
     state.pendingSpawns = 0;
     updateSpawnButtonLabel();
   });
@@ -533,6 +579,8 @@ export function setupUi() {
     state.laneArrows.clear();
     state.userConnectors.clear();
     state.cars = [];
+    state.explosions = [];
+    state.crashes = 0;
     state.pendingSpawns = 0;
     state.selectedNodeId = null;
     state.selectedSegId = null;
