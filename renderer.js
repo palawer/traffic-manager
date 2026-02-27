@@ -449,6 +449,17 @@ export function drawSelectedCarRoute() {
   const glow = ROUTE_GLOW_WIDTH;
   const thin = ROUTE_LINE_WIDTH;
 
+  function getPreviewConnector(nodeId, inSegId, inDir, inLaneIdx, nextStep) {
+    if (nextStep) {
+      const exact = findConnector(
+        nodeId, inSegId, inDir, inLaneIdx,
+        nextStep.segId, nextStep.dir, nextStep.laneIdx
+      );
+      if (exact) return exact;
+    }
+    return findConnector(nodeId, inSegId, inDir, inLaneIdx);
+  }
+
   function strokePolyline(path, fromS = 0) {
     if (!path || path.points.length < 2) return;
     const currPos = pointAtPath(path, fromS);
@@ -487,8 +498,7 @@ export function drawSelectedCarRoute() {
     const inSeg = state.segments.get(inSegId);
     if (inSeg) {
       const destNodeId = (inDir === "AtoB") ? inSeg.nodeB : inSeg.nodeA;
-      const conn = findConnector(destNodeId, inSegId, inDir, inLaneIdx,
-                                 nextStep.segId, nextStep.dir, nextStep.laneIdx);
+      const conn = getPreviewConnector(destNodeId, inSegId, inDir, inLaneIdx, nextStep);
       if (conn) strokePolyline(conn.path, 0);
     }
   }
@@ -503,8 +513,7 @@ export function drawSelectedCarRoute() {
     if (i + 1 < car.laneSeq.length) {
       const nextStep = car.laneSeq[i + 1];
       const destNodeId = (step.dir === "AtoB") ? seg.nodeB : seg.nodeA;
-      const conn = findConnector(destNodeId, step.segId, step.dir, step.laneIdx,
-                                 nextStep.segId, nextStep.dir, nextStep.laneIdx);
+      const conn = getPreviewConnector(destNodeId, step.segId, step.dir, step.laneIdx, nextStep);
       if (conn) strokePolyline(conn.path, 0);
     }
   }
@@ -724,7 +733,7 @@ export function setupUi() {
     saveState();
   });
 
-  setTool("segment");
+  setTool("select");
 }
 
 function drawArrowGlyphs(g, cx, cy, laneHeading, arrowSet) {

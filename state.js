@@ -65,7 +65,7 @@ export const state = {
   explosions: [],   // [{ x, y, age, duration, sparkAngles }]
   networkDirty: true,
   // editor
-  tool: "segment",           // "select" | "segment"
+  tool: "select",            // "select" | "segment"
   drawingSegment: null,      // { fromNodeId } while dragging
   hoveredNodeId: null,
   hoveredSegId: null,

@@ -116,6 +116,9 @@ export function spawnCar() {
     connectorId: null,
     junctionS: 0,
     junctionPath: null,
+    pendingOutSegId: null,
+    pendingOutDir: null,
+    pendingOutLane: null,
     // motion
     speedFactor: SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE,
     speed: 0,
@@ -189,9 +192,9 @@ function updateCarOnSegment(car, dt) {
       let conn = nextStep
         ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
         : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
-      if (!conn) {
-        // Keep lookahead behavior consistent with junction-entry fallback.
-        conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
+      if (!conn && nextStep) {
+        // Relax only lane matching, keep the same target segment+direction.
+        conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
       }
       if (conn) {
         if (!isConnectorGreen(conn) || isJunctionBlocked(conn)) {
@@ -233,19 +236,28 @@ function updateCarOnSegment(car, dt) {
 
     const destNodeId = getDestinationNode(seg, car.dir);
 
-    // Last step: pick a new random destination using the full current network
+    // Last step: always pick a new random destination using the current network.
     if (!nextStep) {
-      if (!rerouteFrom(car, destNodeId)) return;
+      if (!rerouteFrom(car, destNodeId)) {
+        // No viable route right now: wait before stop line and retry next frames.
+        car.s = stopLineHoldS;
+        car.speed = 0;
+        return;
+      }
       nextStep = car.laneSeq[car.routeStep + 1]; // laneSeq[0] since routeStep = -1
     }
 
     let conn = nextStep
       ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
       : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
+    if (!conn && nextStep) {
+      // Relax only lane matching, keep the same target segment+direction.
+      conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
+    }
 
     // Robust fallback: if planned connector does not exist, use any real connector
     // from this incoming lane so cars do not disappear at the junction.
-    if (!conn) {
+    if (!conn && !nextStep) {
       conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
     }
 
@@ -255,6 +267,9 @@ function updateCarOnSegment(car, dt) {
       car.junctionNodeId = conn.nodeId;
       car.junctionPath = conn.path;
       car.junctionS = 0;
+      car.pendingOutSegId = conn.outSegId;
+      car.pendingOutDir = conn.outDir;
+      car.pendingOutLane = conn.outLane;
       car.joinGrace = JOIN_GRACE_TIME;
     } else if (conn) {
       // Wait just before the stop line (car nose at line, not on top of it)
@@ -262,7 +277,35 @@ function updateCarOnSegment(car, dt) {
       car.speed = 0;
       car.joinGrace = JOIN_GRACE_TIME;
     } else {
-      car.remove = true;
+      // Planned transition is no longer viable (topology/user connectors changed).
+      // Recompute from this node; if still impossible, wait and retry.
+      if (!rerouteFrom(car, destNodeId)) {
+        car.s = stopLineHoldS;
+        car.speed = 0;
+        return;
+      }
+      nextStep = car.laneSeq[car.routeStep + 1];
+      if (!nextStep) {
+        car.s = stopLineHoldS;
+        car.speed = 0;
+        return;
+      }
+      conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
+        || findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
+      if (conn && isConnectorGreen(conn) && !isJunctionBlocked(conn)) {
+        car.phase = "junction";
+        car.connectorId = conn.id;
+        car.junctionNodeId = conn.nodeId;
+        car.junctionPath = conn.path;
+        car.junctionS = 0;
+        car.pendingOutSegId = conn.outSegId;
+        car.pendingOutDir = conn.outDir;
+        car.pendingOutLane = conn.outLane;
+        car.joinGrace = JOIN_GRACE_TIME;
+      } else {
+        car.s = stopLineHoldS;
+        car.speed = 0;
+      }
     }
   }
 }
@@ -307,23 +350,29 @@ function updateCarOnJunction(car, dt) {
 
   if (car.junctionS >= car.junctionPath.length) {
     // Exited junction — move to next segment
-    if (conn) {
-      const outSeg = state.segments.get(conn.outSegId);
+    const outSegId = conn ? conn.outSegId : car.pendingOutSegId;
+    const outDir = conn ? conn.outDir : car.pendingOutDir;
+    const outLane = conn ? conn.outLane : car.pendingOutLane;
+    if (outSegId != null && outDir != null && outLane != null) {
+      const outSeg = state.segments.get(outSegId);
       if (outSeg) {
-        const lanePath = buildLanePath(outSeg, state.nodes, conn.outDir, conn.outLane);
+        const lanePath = buildLanePath(outSeg, state.nodes, outDir, outLane);
         if (lanePath.length > 0) {
           car.phase = "segment";
-          car.segId = conn.outSegId;
-          car.dir = conn.outDir;
-          car.laneIdx = conn.outLane;
+          car.segId = outSegId;
+          car.dir = outDir;
+          car.laneIdx = outLane;
           car.path = lanePath;
           car.s = 0;
           car.junctionPath = null;
           car.connectorId = null;
+          car.pendingOutSegId = null;
+          car.pendingOutDir = null;
+          car.pendingOutLane = null;
           car.joinGrace = JOIN_GRACE_TIME;
           car.desiredSpeed = outSeg.speedLimit * car.speedFactor;
           // Advance route step if this matches our plan
-          advanceRouteStepIfMatches(car, conn.outSegId, conn.outDir, conn.outLane);
+          advanceRouteStepIfMatches(car, outSegId, outDir, outLane);
           return;
         }
       }
@@ -391,7 +440,7 @@ function advanceRouteStepIfMatches(car, segId, dir, laneIdx) {
 function rerouteFrom(car, fromNodeId) {
   const nodeIds = [...state.nodes.keys()];
   const candidates = nodeIds.filter(id => id !== fromNodeId);
-  if (candidates.length === 0) { car.remove = true; return false; }
+  if (candidates.length === 0) return false;
 
   // Try random destinations until a valid route is found
   const shuffled = [...candidates].sort(() => Math.random() - 0.5);
@@ -403,6 +452,8 @@ function rerouteFrom(car, fromNodeId) {
     // Verify a connector exists from the car's current lane to the first step
     // (rules out U-turns and other missing connectors)
     const firstStep = laneSeq[0];
+    // Never allow immediate turn-back at the same junction.
+    if (firstStep.segId === car.segId) continue;
     const conn = findConnector(
       fromNodeId,
       car.segId,
@@ -418,9 +469,9 @@ function rerouteFrom(car, fromNodeId) {
     car.routeStep = -1; // advances to 0 when entering the first junction
     return true;
   }
-  car.remove = true;
   return false;
 }
+
 
 function applyAcceleration(car, target, dt) {
   const accel = target > car.speed ? CAR_ACCEL : CAR_BRAKE;

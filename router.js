@@ -100,19 +100,34 @@ export function routeToLaneSequence(routeNodeIds) {
   const laneArrows = state.laneArrows;
   const sequence = [];
 
+  function findSegmentBetween(aNodeId, bNodeId) {
+    for (const s of segments.values()) {
+      if ((s.nodeA === aNodeId && s.nodeB === bNodeId) ||
+          (s.nodeA === bNodeId && s.nodeB === aNodeId)) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  function connectorExists(nodeId, inSegId, inDir, inLane, outSegId, outDir) {
+    const junc = state.junctions.get(nodeId);
+    if (!junc || !junc.connectors || junc.connectors.length === 0) return false;
+    return junc.connectors.some(c =>
+      c.inSegId === inSegId &&
+      c.inDir === inDir &&
+      c.inLane === inLane &&
+      c.outSegId === outSegId &&
+      c.outDir === outDir
+    );
+  }
+
   for (let i = 0; i < routeNodeIds.length - 1; i++) {
     const fromNodeId = routeNodeIds[i];
     const toNodeId = routeNodeIds[i + 1];
 
     // Find the segment connecting these two nodes
-    let seg = null;
-    for (const s of segments.values()) {
-      if ((s.nodeA === fromNodeId && s.nodeB === toNodeId) ||
-          (s.nodeA === toNodeId && s.nodeB === fromNodeId)) {
-        seg = s;
-        break;
-      }
-    }
+    const seg = findSegmentBetween(fromNodeId, toNodeId);
     if (!seg) continue;
 
     const dir = (seg.nodeA === fromNodeId) ? "AtoB" : "BtoA";
@@ -121,18 +136,16 @@ export function routeToLaneSequence(routeNodeIds) {
 
     // Determine next turn type (for lane selection)
     let nextTurnType = "straight";
+    let nextSeg = null;
+    let nextDir = null;
     if (i + 2 < routeNodeIds.length) {
       const nextToNodeId = routeNodeIds[i + 2];
       // Find the segment after this one
-      let nextSeg = null;
-      for (const s of segments.values()) {
-        if ((s.nodeA === toNodeId && s.nodeB === nextToNodeId) ||
-            (s.nodeA === nextToNodeId && s.nodeB === toNodeId)) {
-          nextSeg = s;
-          break;
-        }
-      }
+      nextSeg = findSegmentBetween(toNodeId, nextToNodeId);
       if (nextSeg) {
+        // No immediate U-turn at intersections: always keep moving forward.
+        if (nextSeg.id === seg.id) return [];
+        nextDir = (nextSeg.nodeA === toNodeId) ? "AtoB" : "BtoA";
         const fromNode = nodes.get(fromNodeId);
         const toNode = nodes.get(toNodeId);
         const nextNode = nodes.get(nextToNodeId);
@@ -148,20 +161,33 @@ export function routeToLaneSequence(routeNodeIds) {
     }
 
     // Pick lane based on next turn, checking laneArrows
-    let bestLane = 0;
-    let found = false;
+    const candidatesArrowAndConnector = [];
+    const candidatesConnectorOnly = [];
+    const candidatesArrowOnly = [];
 
     for (let lane = 0; lane < totalLanes; lane++) {
       const key = `${seg.id}:${dir}:${lane}`;
       const arrows = laneArrows.get(key);
-      if (arrows && arrows.has(nextTurnType)) {
-        bestLane = lane;
-        found = true;
-        break;
-      }
+      const arrowOk = !arrows || arrows.size === 0 || arrows.has(nextTurnType);
+      const connectorOk = !nextSeg || connectorExists(toNodeId, seg.id, dir, lane, nextSeg.id, nextDir);
+
+      if (arrowOk && connectorOk) candidatesArrowAndConnector.push(lane);
+      if (connectorOk) candidatesConnectorOnly.push(lane);
+      if (arrowOk) candidatesArrowOnly.push(lane);
     }
 
-    if (!found) {
+    let bestLane = -1;
+    if (candidatesArrowAndConnector.length > 0) {
+      bestLane = candidatesArrowAndConnector[0];
+    } else if (candidatesConnectorOnly.length > 0) {
+      // Connector validity has priority over lane arrows.
+      bestLane = candidatesConnectorOnly[0];
+    } else if (nextSeg) {
+      // Route is impossible with current connector setup.
+      return [];
+    } else if (candidatesArrowOnly.length > 0) {
+      bestLane = candidatesArrowOnly[0];
+    } else {
       // Fallback: right=0, left=last, straight=middle
       if (nextTurnType === "right") bestLane = 0;
       else if (nextTurnType === "left") bestLane = totalLanes - 1;
