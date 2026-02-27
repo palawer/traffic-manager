@@ -143,8 +143,8 @@ export function routeToLaneSequence(routeNodeIds) {
       // Find the segment after this one
       nextSeg = findSegmentBetween(toNodeId, nextToNodeId);
       if (nextSeg) {
-        // No immediate U-turn at intersections: always keep moving forward.
-        if (nextSeg.id === seg.id) return [];
+        // No immediate U-turn at intersections, except dead-ends (single connected segment).
+        if (nextSeg.id === seg.id && getNodeSegments(toNodeId).length > 1) return [];
         nextDir = (nextSeg.nodeA === toNodeId) ? "AtoB" : "BtoA";
         const fromNode = nodes.get(fromNodeId);
         const toNode = nodes.get(toNodeId);

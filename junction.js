@@ -155,6 +155,7 @@ function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
 function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoingLanes, connectorIdRef) {
   const connectors = [];
   if (incomingLanes.length === 0 || outgoingLanes.length === 0) return connectors;
+  const isDeadEnd = segsAtNode.length === 1;
 
   for (const inc of incomingLanes) {
     const inHeading = inc.ep.heading;
@@ -165,7 +166,11 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoi
       : 1;
 
     for (const out of outgoingLanes) {
-      if (out.segId === inc.segId) continue; // no U-turn
+      const sameSegment = out.segId === inc.segId;
+      if (sameSegment) {
+        // Allow turn-back only at true dead-ends, and only to opposite direction.
+        if (!isDeadEnd || out.dir === inc.dir) continue;
+      }
 
       const outHeading = out.ep.heading;
       const turnType = classifyTurn(inHeading, outHeading);
@@ -175,7 +180,10 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoi
         : 1;
 
       let allowed = false;
-      if (turnType === "right") {
+      if (sameSegment && isDeadEnd) {
+        // Dead-end turn-back: keep lane index when possible.
+        allowed = (out.laneIdx === Math.min(inc.laneIdx, totalOutLanes - 1));
+      } else if (turnType === "right") {
         allowed = (inc.laneIdx === 0 && out.laneIdx === 0);
       } else if (turnType === "left") {
         allowed = (inc.laneIdx === totalInLanes - 1 && out.laneIdx === totalOutLanes - 1);

@@ -484,8 +484,9 @@ function rerouteFrom(car, fromNodeId) {
     // Verify a connector exists from the car's current lane to the first step
     // (rules out U-turns and other missing connectors)
     const firstStep = laneSeq[0];
-    // Never allow immediate turn-back at the same junction.
-    if (firstStep.segId === car.segId) continue;
+    // Never allow immediate turn-back at regular intersections.
+    // Allow it only at dead-ends (single connected segment).
+    if (firstStep.segId === car.segId && getNodeSegments(fromNodeId).length > 1) continue;
     const conn = findConnector(
       fromNodeId,
       car.segId,

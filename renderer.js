@@ -245,6 +245,16 @@ export function drawRoads() {
     roadsGraphics.stroke({ width: totalWidth, color: COLORS.road, cap: "butt" });
   }
 
+  // Round cap on free ends (nodes connected to exactly one segment).
+  for (const node of state.nodes.values()) {
+    const segs = getNodeSegments(node.id);
+    if (segs.length !== 1) continue;
+    const seg = segs[0];
+    const totalWidth = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH;
+    roadsGraphics.circle(node.x, node.y, totalWidth / 2);
+    roadsGraphics.fill(COLORS.road);
+  }
+
   // Speed-tool hover highlight
   if (state.tool === "speed" && state.hoveredSegId !== null) {
     const hSeg = state.segments.get(state.hoveredSegId);
