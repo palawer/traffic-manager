@@ -154,9 +154,30 @@ export function updateCars(dt) {
     for (let i = 0; i < maxAttempts && state.pendingSpawns > 0; i++) {
       if (spawnCar()) state.pendingSpawns--;
     }
-    // If no nodes/segments exist, clear queue
-    if (state.nodes.size < 2) state.pendingSpawns = 0;
+    // If no nodes/segments exist, or no valid route can be generated at all,
+    // clear queue to avoid retrying forever every frame.
+    if (state.nodes.size < 2 || state.segments.size === 0 || !hasAnySpawnRoute()) {
+      state.pendingSpawns = 0;
+    }
   }
+}
+
+function hasAnySpawnRoute() {
+  const nodeIds = [...state.nodes.keys()];
+  if (nodeIds.length < 2) return false;
+
+  for (const fromNodeId of nodeIds) {
+    if (getNodeSegments(fromNodeId).length === 0) continue;
+
+    for (const toNodeId of nodeIds) {
+      if (toNodeId === fromNodeId) continue;
+      const route = findRoute(fromNodeId, toNodeId);
+      if (!route || route.length < 2) continue;
+      const laneSeq = routeToLaneSequence(route);
+      if (laneSeq.length > 0) return true;
+    }
+  }
+  return false;
 }
 
 function updateCarOnSegment(car, dt) {
