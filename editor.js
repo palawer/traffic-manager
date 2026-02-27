@@ -373,6 +373,7 @@ function onPointerDown(e) {
         const cycle = SPEED_PRESETS;
         const idx = cycle.indexOf(seg.speedLimit);
         seg.speedLimit = cycle[(idx + 1) % cycle.length];
+        saveState();
       }
     }
     return;
