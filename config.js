@@ -11,11 +11,13 @@ export const NODE_SNAP_DIST  = 20;   // px to auto-snap to an existing node
 // ── Road colors ───────────────────────────────────────────────────────────────
 export const COLOR_ROAD       = 0x2d3138; // asphalt body (segments + junctions)
 export const COLOR_CENTERLINE = 0xe8c840; // yellow dashes between directions
+export const COLOR_LANE_DIVIDER = 0xe2e2e2; // lane separators (same direction)
 
 // ── Road markings ─────────────────────────────────────────────────────────────
 export const CENTERLINE_WIDTH = 2;   // centerline stroke width (world px)
 export const CENTERLINE_DASH  = 16;  // centerline dash length (world px)
 export const CENTERLINE_GAP   = 8;   // centerline gap length (world px)
+export const LANE_DIVIDER_WIDTH = 1.5; // lane-divider stroke width (world px)
 export const STOP_LINE_WIDTH  = 4;   // stop-line stroke width (screen px baseline)
 export const STOP_LINE_COLOR  = 0xe2e2e2;
 export const STOP_LINE_ALPHA  = 1;

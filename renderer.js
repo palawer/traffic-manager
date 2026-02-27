@@ -2,7 +2,7 @@ import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
 import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   CONNECTOR_PATH_WIDTH, CONNECTOR_PATH_COLOR, CONNECTOR_PATH_ALPHA,
   DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH, DEBUG_PATH_CONNECTOR_WIDTH,
-  CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP, STOP_LINE_WIDTH, STOP_LINE_ALPHA,
+  CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP, LANE_DIVIDER_WIDTH, STOP_LINE_WIDTH, STOP_LINE_ALPHA,
   NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS,
   SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
@@ -207,7 +207,7 @@ export function drawRoads() {
   debugTrajectoriesGraphics.clear();
   junctionGraphics.clear();
 
-  const lw = 1.5;
+  const lw = LANE_DIVIDER_WIDTH;
   const pendingStopLines = [];
 
   // Draw junctions
