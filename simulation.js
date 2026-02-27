@@ -374,6 +374,12 @@ function rerouteFrom(car, fromNodeId) {
     if (!route || route.length < 2) continue;
     const laneSeq = routeToLaneSequence(route);
     if (laneSeq.length === 0) continue;
+    // Verify a connector exists from the car's current lane to the first step
+    // (rules out U-turns and other missing connectors)
+    const firstStep = laneSeq[0];
+    const conn = findConnector(fromNodeId, car.segId, car.dir, car.laneIdx,
+                               firstStep.segId, firstStep.dir, firstStep.laneIdx);
+    if (!conn) continue;
     car.route = route;
     car.laneSeq = laneSeq;
     car.routeStep = -1; // advances to 0 when entering the first junction

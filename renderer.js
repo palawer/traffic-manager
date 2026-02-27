@@ -386,13 +386,16 @@ export function drawSelectedCarRoute() {
   const nextStepIdx = car.routeStep + 1;
 
   // 2. Connector from current segment to next step (segment phase only)
-  if (car.phase === "segment" && car.routeStep >= 0 && nextStepIdx < car.laneSeq.length) {
-    const currStep = car.laneSeq[car.routeStep];
-    const nextStep = car.laneSeq[nextStepIdx];
-    const seg = state.segments.get(currStep.segId);
-    if (seg) {
-      const destNodeId = (currStep.dir === "AtoB") ? seg.nodeB : seg.nodeA;
-      const conn = findConnector(destNodeId, currStep.segId, currStep.dir, currStep.laneIdx,
+  if (car.phase === "segment" && nextStepIdx < car.laneSeq.length) {
+    // When routeStep = -1 (rerouted, waiting at stop line) use the car's live position
+    const inSegId   = car.routeStep >= 0 ? car.laneSeq[car.routeStep].segId    : car.segId;
+    const inDir     = car.routeStep >= 0 ? car.laneSeq[car.routeStep].dir      : car.dir;
+    const inLaneIdx = car.routeStep >= 0 ? car.laneSeq[car.routeStep].laneIdx  : car.laneIdx;
+    const nextStep  = car.laneSeq[nextStepIdx];
+    const inSeg = state.segments.get(inSegId);
+    if (inSeg) {
+      const destNodeId = (inDir === "AtoB") ? inSeg.nodeB : inSeg.nodeA;
+      const conn = findConnector(destNodeId, inSegId, inDir, inLaneIdx,
                                  nextStep.segId, nextStep.dir, nextStep.laneIdx);
       if (conn) strokePolyline(conn.path, 0);
     }
