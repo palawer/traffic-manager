@@ -125,10 +125,6 @@ export const COLOR_ARROW_GREEN    = 0x35c759; // turn-arrow fill when the lane i
 // Editor preview
 export const COLOR_PREVIEW_ROAD   = 0x5a9fd4; // ghost road shown while drawing a new segment
 
-// Stop line
-export const STOP_LINE_COLOR = 0xdddddd; // painted stop-line color
-
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROAD MARKINGS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -139,8 +135,15 @@ export const CENTERLINE_GAP      = 8;   // gap between dashes (world px)
 export const LANE_DIVIDER_WIDTH  = 1.5; // lane-divider stroke width (world px)
 export const LANE_DIVIDER_DASH   = 12;  // lane-divider dash length (world px)
 export const LANE_DIVIDER_GAP    = 10;  // lane-divider gap length (world px)
-export const STOP_LINE_WIDTH     = 2;   // stop-line stroke width (world px)
-export const STOP_LINE_ALPHA     = 1;   // stop-line opacity
+
+// Crosswalk (zebra crossing) painted at the entry of each junction arm.
+// Stripes run parallel to the road and are distributed across its full width.
+export const CROSSWALK_COLOR        = 0xdddddd; // stripe color
+export const CROSSWALK_STRIPE_WIDTH = 3;        // width of each stripe across the road (world px)
+export const CROSSWALK_STRIPE_GAP   = 3;        // gap between stripes across the road (world px)
+export const CROSSWALK_DEPTH        = 10;       // length of each stripe along the road direction (world px)
+export const CROSSWALK_LANE_GAP     = 4;        // clear gap between lane markings and the crosswalk (world px)
+export const CROSSWALK_ALPHA        = 1;
 
 
 // ═══════════════════════════════════════════════════════════════════════════════

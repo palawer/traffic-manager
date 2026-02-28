@@ -7,7 +7,8 @@ import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   DEBUG_INVALID_COLOR, DEBUG_INVALID_ALPHA, DEBUG_INVALID_WIDTH,
   DEBUG_HEAT_LOW_COLOR, DEBUG_HEAT_HIGH_COLOR, DEBUG_HEAT_ALPHA,
   DEBUG_TEXT_COLOR, DEBUG_TEXT_BG_COLOR, DEBUG_TEXT_BG_ALPHA, DEBUG_TEXT_SIZE, DEBUG_TEXT_OFFSET_Y,
-  CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP, LANE_DIVIDER_WIDTH, STOP_LINE_WIDTH, STOP_LINE_ALPHA,
+  CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP, LANE_DIVIDER_WIDTH,
+  CROSSWALK_COLOR, CROSSWALK_STRIPE_WIDTH, CROSSWALK_STRIPE_GAP, CROSSWALK_DEPTH, CROSSWALK_LANE_GAP, CROSSWALK_ALPHA,
   GRID_LINE_WIDTH, ROAD_HOVER_STROKE_EXTRA, ROAD_HOVER_ALPHA, LANE_DIVIDER_DASH, LANE_DIVIDER_GAP,
   NODE_STROKE_WIDTH, NODE_STROKE_COLOR, NODE_STROKE_ALPHA,
   PREVIEW_INVALID_COLOR, PREVIEW_ALPHA, PREVIEW_SNAP_RADIUS, PREVIEW_SNAP_STROKE,
@@ -308,52 +309,46 @@ export function drawRoads() {
     const nx = -uy, ny = ux;
     const halfW = totalWidth / 2;
 
+    // Crosswalks exist at junction ends (nodes with ≠ 2 segments).
+    // Lane markings are clipped to the far edge of the crosswalk so they
+    // don't run through the zebra stripes.
+    const hasXwalkA = getNodeSegments(seg.nodeA).length !== 2;
+    const hasXwalkB = getNodeSegments(seg.nodeB).length !== 2;
+    const markClip = CROSSWALK_DEPTH + CROSSWALK_LANE_GAP;
+    const clA = hasXwalkA ? { x: pA.x + ux * markClip, y: pA.y + uy * markClip } : pA;
+    const clB = hasXwalkB ? { x: pB.x - ux * markClip, y: pB.y - uy * markClip } : pB;
+
     // Centerline (yellow dashes if 2-way). Pass-through bends handled by drawBendCenterline.
     if (seg.lanesAtoB > 0 && seg.lanesBtoA > 0) {
-      drawDashedLine(laneMarkingsGraphics, pA, pB, 0, CENTERLINE_WIDTH, COLORS.centerline, CENTERLINE_DASH, CENTERLINE_GAP);
+      drawDashedLine(laneMarkingsGraphics, clA, clB, 0, CENTERLINE_WIDTH, COLORS.centerline, CENTERLINE_DASH, CENTERLINE_GAP);
     }
 
     // Inner lane dividers (AtoB side)
     for (let i = 1; i < seg.lanesAtoB; i++) {
       const off = i * LANE_WIDTH;
-      const ax = pA.x + nx * off, ay = pA.y + ny * off;
-      const bx = pB.x + nx * off, by = pB.y + ny * off;
       drawDashedLine(
         laneMarkingsGraphics,
-        { x: ax, y: ay },
-        { x: bx, y: by },
-        0,
-        lw,
-        COLORS.laneDivider,
-        LANE_DIVIDER_DASH,
-        LANE_DIVIDER_GAP
+        { x: clA.x + nx * off, y: clA.y + ny * off },
+        { x: clB.x + nx * off, y: clB.y + ny * off },
+        0, lw, COLORS.laneDivider, LANE_DIVIDER_DASH, LANE_DIVIDER_GAP
       );
     }
 
     // Inner lane dividers (BtoA side)
     for (let i = 1; i < seg.lanesBtoA; i++) {
       const off = -i * LANE_WIDTH;
-      const ax = pA.x + nx * off, ay = pA.y + ny * off;
-      const bx = pB.x + nx * off, by = pB.y + ny * off;
       drawDashedLine(
         laneMarkingsGraphics,
-        { x: ax, y: ay },
-        { x: bx, y: by },
-        0,
-        lw,
-        COLORS.laneDivider,
-        LANE_DIVIDER_DASH,
-        LANE_DIVIDER_GAP
+        { x: clA.x + nx * off, y: clA.y + ny * off },
+        { x: clB.x + nx * off, y: clB.y + ny * off },
+        0, lw, COLORS.laneDivider, LANE_DIVIDER_DASH, LANE_DIVIDER_GAP
       );
     }
 
-    // Stop lines — skip pass-through nodes (exactly 2 segments).
-    if (getNodeSegments(seg.nodeA).length !== 2) {
-      pendingStopLines.push({ pt: pA, nx, ny, halfW, lw: STOP_LINE_WIDTH });
-    }
-    if (getNodeSegments(seg.nodeB).length !== 2) {
-      pendingStopLines.push({ pt: pB, nx, ny, halfW, lw: STOP_LINE_WIDTH });
-    }
+    // Crosswalks — skip pass-through nodes (exactly 2 segments).
+    // dir: +1 = move in road direction (away from nodeA), -1 = against it (away from nodeB).
+    if (hasXwalkA) pendingStopLines.push({ pt: pA, nx, ny, halfW, dir: +1 });
+    if (hasXwalkB) pendingStopLines.push({ pt: pB, nx, ny, halfW, dir: -1 });
   }
 
   // Draw connector paths — skip pass-through nodes (exactly 2 segments).
@@ -375,9 +370,12 @@ export function drawRoads() {
     drawBendCenterline(laneMarkingsGraphics, nodeId, segs);
   }
 
-  // Draw stop lines above intersection trajectories.
+  // Draw crosswalks above intersection trajectories, shifted half-depth into the segment.
   for (const s of pendingStopLines) {
-    drawStopLine(laneMarkingsGraphics, s.pt, s.nx, s.ny, s.halfW, s.lw);
+    const rdx = s.ny, rdy = -s.nx; // road-direction unit vector
+    const shift = s.dir * CROSSWALK_DEPTH / 2;
+    const pt = { x: s.pt.x + rdx * shift, y: s.pt.y + rdy * shift };
+    drawCrosswalk(laneMarkingsGraphics, pt, s.nx, s.ny, s.halfW);
   }
 
   if (state.debugLanes) {
@@ -454,10 +452,24 @@ export function drawRoads() {
   drawNodes();
 }
 
-function drawStopLine(g, pt, nx, ny, halfW, lw) {
-  g.moveTo(pt.x - nx * halfW, pt.y - ny * halfW);
-  g.lineTo(pt.x + nx * halfW, pt.y + ny * halfW);
-  g.stroke({ width: lw, color: COLORS.stopLine, alpha: STOP_LINE_ALPHA });
+/**
+ * Draw a zebra-crossing pattern centred at pt.
+ * Stripes run parallel to the road and fill its full width.
+ */
+function drawCrosswalk(g, pt, nx, ny, halfW) {
+  const rdx = ny, rdy = -nx; // road-direction unit vector
+  const sw     = CROSSWALK_STRIPE_WIDTH;
+  const gap    = CROSSWALK_STRIPE_GAP;
+  const period = sw + gap;
+  // Walk across the road width, centring the pattern.
+  let off = -halfW + sw / 2;
+  while (off <= halfW - sw / 2 + 0.01) {
+    const cx = pt.x + nx * off, cy = pt.y + ny * off;
+    g.moveTo(cx - rdx * CROSSWALK_DEPTH / 2, cy - rdy * CROSSWALK_DEPTH / 2);
+    g.lineTo(cx + rdx * CROSSWALK_DEPTH / 2, cy + rdy * CROSSWALK_DEPTH / 2);
+    g.stroke({ width: sw, color: CROSSWALK_COLOR, alpha: CROSSWALK_ALPHA });
+    off += period;
+  }
 }
 
 /**

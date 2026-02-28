@@ -20,7 +20,6 @@ import {
   COLOR_CONNECTOR_PATH,
   COLOR_ARROW_GREEN,
   COLOR_PREVIEW_ROAD,
-  STOP_LINE_COLOR,
 } from "./config.js";
 
 export const COLORS = {
@@ -32,7 +31,6 @@ export const COLORS = {
   centerline: COLOR_CENTERLINE,
   laneDivider: COLOR_LANE_DIVIDER,
   edgeLine: COLOR_EDGE_LINE,
-  stopLine: STOP_LINE_COLOR,
   junction: COLOR_ROAD,
   selected: COLOR_SELECTED,
   nodeDefault: COLOR_NODE_DEFAULT,
