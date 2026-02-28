@@ -1,7 +1,5 @@
 import { state } from "./state.js";
-import { normalizeAngle } from "./geometry.js";
 import { getNodeSegments } from "./network.js";
-import { STRAIGHT_THRESHOLD } from "./config.js";
 
 /**
  * A* pathfinding on the node graph.
@@ -97,7 +95,6 @@ export function findRoute(fromNodeId, toNodeId) {
 export function routeToLaneSequence(routeNodeIds) {
   const nodes = state.nodes;
   const segments = state.segments;
-  const laneArrows = state.laneArrows;
   const sequence = [];
   const segmentByPair = new Map();
 
@@ -137,8 +134,7 @@ export function routeToLaneSequence(routeNodeIds) {
     const totalLanes = (dir === "AtoB") ? seg.lanesAtoB : seg.lanesBtoA;
     if (totalLanes <= 0) continue;
 
-    // Determine next turn type (for lane selection)
-    let nextTurnType = "straight";
+    // Determine next step segment/direction for connector validation.
     let nextSeg = null;
     let nextDir = null;
     if (i + 2 < routeNodeIds.length) {
@@ -149,40 +145,20 @@ export function routeToLaneSequence(routeNodeIds) {
         // No immediate U-turn at intersections, except dead-ends (single connected segment).
         if (nextSeg.id === seg.id && getNodeSegments(toNodeId).length > 1) return [];
         nextDir = (nextSeg.nodeA === toNodeId) ? "AtoB" : "BtoA";
-        const fromNode = nodes.get(fromNodeId);
-        const toNode = nodes.get(toNodeId);
-        const nextNode = nodes.get(nextToNodeId);
-        if (fromNode && toNode && nextNode) {
-          const inHeading = Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x);
-          const outHeading = Math.atan2(nextNode.y - toNode.y, nextNode.x - toNode.x);
-          const diff = normalizeAngle(outHeading - inHeading);
-          if (Math.abs(diff) < STRAIGHT_THRESHOLD) nextTurnType = "straight";
-          else if (diff > 0) nextTurnType = "right";
-          else nextTurnType = "left";
-        }
       }
     }
 
-    // Pick lane based on next turn, checking laneArrows
-    const candidatesArrowAndConnector = [];
+    // Pick lane based on connector availability.
     const candidatesConnectorOnly = [];
 
     for (let lane = 0; lane < totalLanes; lane++) {
-      const key = `${seg.id}:${dir}:${lane}`;
-      const arrows = laneArrows.get(key);
-      const arrowOk = !arrows || arrows.size === 0 || arrows.has(nextTurnType);
       const connectorOk = !nextSeg || connectorExists(toNodeId, seg.id, dir, lane, nextSeg.id, nextDir);
 
-      if (arrowOk && connectorOk) candidatesArrowAndConnector.push(lane);
       if (connectorOk) candidatesConnectorOnly.push(lane);
     }
 
     let bestLane = -1;
-    if (candidatesArrowAndConnector.length > 0) {
-      // Ideal: a lane whose arrow marking matches the turn and has a connector.
-      bestLane = candidatesArrowAndConnector[0];
-    } else if (candidatesConnectorOnly.length > 0) {
-      // Connector validity has priority over lane arrows.
+    if (candidatesConnectorOnly.length > 0) {
       // When nextSeg is null, connectorOk is always true so every lane qualifies.
       bestLane = candidatesConnectorOnly[0];
     } else {

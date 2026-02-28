@@ -897,7 +897,7 @@ export function updatePropertiesPanel() {
 export function updateStatus() {
   updateSpawnButtonLabel();
   const statusEl = document.getElementById("status");
-  const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad", arrow: "Flechas", signal: "Semáforos" }[state.tool] || state.tool;
+  const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad", signal: "Semáforos", connector: "Conectores" }[state.tool] || state.tool;
   statusEl.textContent = `Herramienta: ${toolName} · Nodos: ${state.nodes.size} · Segmentos: ${state.segments.size} · Coches: ${state.cars.length}`;
   const crashEl = document.getElementById("crashCount");
   if (crashEl) crashEl.textContent = `Siniestros: ${state.crashes}`;

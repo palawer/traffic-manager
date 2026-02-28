@@ -1,6 +1,6 @@
 import { state, NODE_SNAP_DIST, GRID, LANE_WIDTH } from "./state.js";
 import {
-  HIT_NODE, HIT_SEGMENT, HIT_CAR, HIT_LANE, HIT_CONNECTOR_EP,
+  HIT_NODE, HIT_SEGMENT, HIT_CAR, HIT_CONNECTOR_EP,
   SIGNAL_PHASE_DURATION, SPEED_PRESETS, MAX_LANES,
   ZOOM_SENSITIVITY, ZOOM_MIN, ZOOM_MAX,
 } from "./config.js";
@@ -138,63 +138,6 @@ function pointSegDist(px, py, x1, y1, x2, y2) {
   const vv = vx * vx + vy * vy || 1;
   const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / vv));
   return Math.hypot(px - (x1 + vx * t), py - (y1 + vy * t));
-}
-
-/**
- * Find which lane the cursor is over. Returns { segId, dir, laneIdx } or null.
- */
-function laneHitTest(wx, wy) {
-  let bestSeg = null, bestDist = HIT_LANE;
-  for (const seg of state.segments.values()) {
-    const nA = state.nodes.get(seg.nodeA);
-    const nB = state.nodes.get(seg.nodeB);
-    if (!nA || !nB) continue;
-    const d = pointSegDist(wx, wy, nA.x, nA.y, nB.x, nB.y);
-    if (d < bestDist) { bestDist = d; bestSeg = seg; }
-  }
-  if (!bestSeg) return null;
-
-  const nA = state.nodes.get(bestSeg.nodeA);
-  const nB = state.nodes.get(bestSeg.nodeB);
-  const heading = Math.atan2(nB.y - nA.y, nB.x - nA.x);
-  const rightX = -Math.sin(heading), rightY = Math.cos(heading);
-  const perpOffset = (wx - nA.x) * rightX + (wy - nA.y) * rightY;
-
-  if (perpOffset >= 0) {
-    const laneIdx = Math.floor(perpOffset / LANE_WIDTH);
-    if (laneIdx < bestSeg.lanesAtoB) return { segId: bestSeg.id, dir: "AtoB", laneIdx };
-  } else {
-    const laneIdx = Math.floor(-perpOffset / LANE_WIDTH);
-    if (laneIdx < bestSeg.lanesBtoA) return { segId: bestSeg.id, dir: "BtoA", laneIdx };
-  }
-  return null;
-}
-
-const ARROW_PRESETS = [
-  [],
-  ["straight"],
-  ["right"],
-  ["left"],
-  ["straight", "right"],
-  ["straight", "left"],
-];
-
-function cycleArrows(segId, dir, laneIdx) {
-  const key = `${segId}:${dir}:${laneIdx}`;
-  const current = state.laneArrows.get(key);
-
-  let idx = 0;
-  if (current && current.size > 0) {
-    const sig = [...current].sort().join(",");
-    for (let i = 1; i < ARROW_PRESETS.length; i++) {
-      if ([...ARROW_PRESETS[i]].sort().join(",") === sig) { idx = i; break; }
-    }
-  }
-
-  const next = ARROW_PRESETS[(idx + 1) % ARROW_PRESETS.length];
-  if (next.length === 0) state.laneArrows.delete(key);
-  else state.laneArrows.set(key, new Set(next));
-  saveState();
 }
 
 /**
@@ -357,13 +300,6 @@ function onPointerDown(e) {
     return;
   }
 
-  // Arrow tool
-  if (state.tool === "arrow") {
-    const lane = laneHitTest(world.x, world.y);
-    if (lane) cycleArrows(lane.segId, lane.dir, lane.laneIdx);
-    return;
-  }
-
   // Speed limit tool
   if (state.tool === "speed") {
     const hit = hitTest(world.x, world.y);
@@ -476,17 +412,12 @@ function onPointerMove(e) {
   // Update hover node
   state.hoveredNodeId = snapToNode(world.x, world.y);
 
-  // Update hover segment (for speed tool) and hover lane (for arrow tool)
+  // Update hover segment (for speed tool)
   if (state.tool === "speed") {
     const hit = hitTest(world.x, world.y);
     state.hoveredSegId = (hit && hit.type === "segment") ? hit.id : null;
-    state.hoveredLane = null;
-  } else if (state.tool === "arrow") {
-    state.hoveredLane = laneHitTest(world.x, world.y);
-    state.hoveredSegId = null;
   } else {
     state.hoveredSegId = null;
-    state.hoveredLane = null;
   }
 
   if (dragNodeId !== null) {
@@ -571,7 +502,6 @@ function onKeyDown(e) {
   if (e.key === "r" || e.key === "R") setTool("segment");
   if (e.key === "s" || e.key === "S") setTool("select");
   if (e.key === "v" || e.key === "V") setTool("speed");
-  if (e.key === "a" || e.key === "A") setTool("arrow");
   if (e.key === "t" || e.key === "T") setTool("signal");
   if (e.key === "c" || e.key === "C") setTool("connector");
   if (e.key === "p" || e.key === "P") document.getElementById("pauseBtn")?.click();
