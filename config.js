@@ -165,6 +165,10 @@ export const SPAWN_CLEARANCE    = 35;  // px radius around spawn point that must
 export const SPAWN_MAX_ATTEMPTS = 6;   // max spawn tries per frame
 export const SPAWN_BATCH        = 5;   // cars added per button click
 
+// ── Rerouting ─────────────────────────────────────────────────────────────────
+export const REROUTE_RETRY_INTERVAL = 3.0; // seconds between reroute retries when stuck
+export const REROUTE_MAX_RETRIES    = 4;   // max retries before removing the car
+
 // ── Car personality ───────────────────────────────────────────────────────────
 export const SPEED_FACTOR_MIN   = 0.85; // slowest driver (fraction of speed limit)
 export const SPEED_FACTOR_RANGE = 0.20; // random range added on top  →  max = 1.05

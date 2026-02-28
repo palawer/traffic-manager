@@ -8,6 +8,7 @@ import {
   CRASH_DIST, EXPLOSION_DURATION, EXPLOSION_SPARKS,
   CAR_BODY_HALF_LENGTH,
   STOP_LINE_CLEARANCE,
+  REROUTE_RETRY_INTERVAL, REROUTE_MAX_RETRIES,
 } from "./config.js";
 import { pointAtPath, headingAtPath, hslToHex } from "./geometry.js";
 import { rebuildJunctions, getNodeSegments, findConnector, getDestinationNode } from "./network.js";
@@ -109,7 +110,7 @@ export function spawnCar() {
   if (!seg) return false;
 
   const lanePath = buildLanePath(seg, state.nodes, firstStep.dir, firstStep.laneIdx);
-  if (lanePath.length < 1) return false;
+  if (!lanePath || lanePath.length < 1) return false;
 
   // Check spawn point is clear
   const head = pointAtPath(lanePath, 0);
@@ -161,6 +162,8 @@ export function spawnCar() {
     debugWaitTime: 0,
     debugStoppedTotal: 0,
     debugReroutes: 0,
+    reroutePendingTime: 0,
+    reroutePendingRetries: 0,
   };
 
   state.cars.push(car);
@@ -210,13 +213,41 @@ function hasAnySpawnRoute() {
       const route = findRoute(fromNodeId, toNodeId);
       if (!route || route.length < 2) continue;
       const laneSeq = routeToLaneSequence(route);
-      if (laneSeq.length > 0) return true;
+      if (laneSeq.length === 0) continue;
+      // Also verify the first lane path is geometrically valid
+      const firstStep = laneSeq[0];
+      const seg = state.segments.get(firstStep.segId);
+      if (!seg) continue;
+      const lanePath = buildLanePath(seg, state.nodes, firstStep.dir, firstStep.laneIdx);
+      if (lanePath && lanePath.length > 0) return true;
     }
   }
   return false;
 }
 
 function updateCarOnSegment(car, dt) {
+  // Retry reroute for cars stuck at stop line with no viable route
+  if (car.reroutePendingTime > 0) {
+    car.reroutePendingTime = Math.max(0, car.reroutePendingTime - dt);
+    if (car.reroutePendingTime > 0) {
+      car.debugBrakeReason = "reroute_pending";
+      return;
+    }
+    // Timer expired — try again
+    const rerouteSeg = state.segments.get(car.segId);
+    if (!rerouteSeg) { car.remove = true; return; }
+    const rerouteDestId = getDestinationNode(rerouteSeg, car.dir);
+    if (!rerouteFrom(car, rerouteDestId)) {
+      car.reroutePendingRetries++;
+      if (car.reroutePendingRetries >= REROUTE_MAX_RETRIES) { car.remove = true; return; }
+      car.reroutePendingTime = REROUTE_RETRY_INTERVAL;
+      car.debugBrakeReason = "reroute_pending";
+      return;
+    }
+    // Reroute succeeded — reset and fall through to normal update
+    car.reroutePendingRetries = 0;
+  }
+
   const remToEnd = car.path.length - car.s;
   let stopBeforeLineS = null;
   const stopLineHoldS = Math.max(0, car.path.length - CAR_BODY_HALF_LENGTH - STOP_LINE_CLEARANCE);
@@ -248,6 +279,14 @@ function updateCarOnSegment(car, dt) {
   // Determine the desired next step (for connector routing)
   let nextStep = (car.laneSeq && car.routeStep + 1 < car.laneSeq.length)
     ? car.laneSeq[car.routeStep + 1] : null;
+  // Clamp laneIdx in case the segment's lane count was reduced since the route was planned
+  if (nextStep) {
+    const nextStepSeg = state.segments.get(nextStep.segId);
+    if (nextStepSeg) {
+      const maxLane = (nextStep.dir === "AtoB" ? nextStepSeg.lanesAtoB : nextStepSeg.lanesBtoA) - 1;
+      if (maxLane >= 0 && nextStep.laneIdx > maxLane) nextStep.laneIdx = maxLane;
+    }
+  }
   car.debugNextStep = nextStep ? `${nextStep.segId}:${nextStep.dir}:${nextStep.laneIdx}` : "reroute";
 
   // Look ahead to junction
@@ -333,13 +372,21 @@ function updateCarOnSegment(car, dt) {
     // Last step: always pick a new random destination using the current network.
     if (!nextStep) {
       if (!rerouteFrom(car, destNodeId)) {
-        // No viable route right now: wait before stop line and retry next frames.
+        // No viable route right now: arm timer to retry after a delay.
         car.s = stopLineHoldS;
         car.speed = 0;
+        car.reroutePendingTime = REROUTE_RETRY_INTERVAL;
         car.debugBrakeReason = "reroute_pending";
         return;
       }
-      nextStep = car.laneSeq[car.routeStep + 1]; // laneSeq[0] since routeStep = -1
+      nextStep = car.laneSeq && car.laneSeq[car.routeStep + 1]; // laneSeq[0] since routeStep = -1
+      if (!nextStep) {
+        car.s = stopLineHoldS;
+        car.speed = 0;
+        car.reroutePendingTime = REROUTE_RETRY_INTERVAL;
+        car.debugBrakeReason = "reroute_pending";
+        return;
+      }
     }
 
     let conn = nextStep
@@ -378,6 +425,7 @@ function updateCarOnSegment(car, dt) {
       if (!rerouteFrom(car, destNodeId)) {
         car.s = stopLineHoldS;
         car.speed = 0;
+        car.reroutePendingTime = REROUTE_RETRY_INTERVAL;
         car.debugBrakeReason = "reroute_pending";
         car.debugInvalidConnector = true;
         return;
@@ -482,7 +530,7 @@ function updateCarOnJunction(car, dt) {
       const outSeg = state.segments.get(outSegId);
       if (outSeg) {
         const lanePath = buildLanePath(outSeg, state.nodes, outDir, outLane);
-        if (lanePath.length > 0) {
+        if (lanePath && lanePath.length > 0) {
           car.phase = "segment";
           car.segId = outSegId;
           car.dir = outDir;
@@ -538,7 +586,7 @@ function advanceRouteStep(car) {
   const seg = state.segments.get(step.segId);
   if (!seg) { car.remove = true; return; }
   const lanePath = buildLanePath(seg, state.nodes, step.dir, step.laneIdx);
-  if (lanePath.length < 1) { car.remove = true; return; }
+  if (!lanePath || lanePath.length < 1) { car.remove = true; return; }
   car.phase = "segment";
   car.segId = step.segId;
   car.dir = step.dir;

@@ -55,7 +55,7 @@ export const state = {
   junctions: new Map(),      // nodeId → { polygon, connectors: LaneConnector[] }
   nextNodeId: 1,
   nextSegmentId: 1,
-  nextConnectorId: 1,
+  nextConnectorId: 0,
   signals: new Map(),        // nodeId → TrafficSignal
   laneArrows: new Map(),     // "segId:dir:laneIdx" → Set<"left"|"straight"|"right">
   userConnectors: new Map(), // nodeId → Map<inKey, Set<outKey>>  "segId:dir:laneIdx"

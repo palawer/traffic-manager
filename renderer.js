@@ -988,7 +988,7 @@ export function setupUi() {
     state.connectorTool.selectedInKey = null;
     state.nextNodeId = 1;
     state.nextSegmentId = 1;
-    state.nextConnectorId = 1;
+    state.nextConnectorId = 0;
     updateSpawnButtonLabel();
     markNetworkDirty();
     saveState();

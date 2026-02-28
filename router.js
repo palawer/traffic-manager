@@ -166,7 +166,6 @@ export function routeToLaneSequence(routeNodeIds) {
     // Pick lane based on next turn, checking laneArrows
     const candidatesArrowAndConnector = [];
     const candidatesConnectorOnly = [];
-    const candidatesArrowOnly = [];
 
     for (let lane = 0; lane < totalLanes; lane++) {
       const key = `${seg.id}:${dir}:${lane}`;
@@ -176,25 +175,21 @@ export function routeToLaneSequence(routeNodeIds) {
 
       if (arrowOk && connectorOk) candidatesArrowAndConnector.push(lane);
       if (connectorOk) candidatesConnectorOnly.push(lane);
-      if (arrowOk) candidatesArrowOnly.push(lane);
     }
 
     let bestLane = -1;
     if (candidatesArrowAndConnector.length > 0) {
+      // Ideal: a lane whose arrow marking matches the turn and has a connector.
       bestLane = candidatesArrowAndConnector[0];
     } else if (candidatesConnectorOnly.length > 0) {
       // Connector validity has priority over lane arrows.
+      // When nextSeg is null, connectorOk is always true so every lane qualifies.
       bestLane = candidatesConnectorOnly[0];
-    } else if (nextSeg) {
-      // Route is impossible with current connector setup.
-      return [];
-    } else if (candidatesArrowOnly.length > 0) {
-      bestLane = candidatesArrowOnly[0];
     } else {
-      // Fallback: right=0, left=last, straight=middle
-      if (nextTurnType === "right") bestLane = 0;
-      else if (nextTurnType === "left") bestLane = totalLanes - 1;
-      else bestLane = Math.floor((totalLanes - 1) / 2);
+      // No lane has a valid connector to the next segment — route is impossible
+      // with the current junction setup. (Unreachable when nextSeg is null since
+      // candidatesConnectorOnly is always non-empty in that case.)
+      return [];
     }
 
     bestLane = Math.max(0, Math.min(totalLanes - 1, bestLane));

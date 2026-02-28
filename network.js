@@ -102,6 +102,9 @@ export function removeSegment(segId) {
   state.junctions.delete(seg.nodeA);
   state.junctions.delete(seg.nodeB);
   invalidateNodeSegmentsCache();
+  // Remove signals for nodes that no longer have any connected segments
+  if (getNodeSegments(seg.nodeA).length === 0) state.signals.delete(seg.nodeA);
+  if (getNodeSegments(seg.nodeB).length === 0) state.signals.delete(seg.nodeB);
   state.networkDirty = true;
 }
 
@@ -116,7 +119,7 @@ export function rebuildJunctions() {
   state.junctions.clear();
   // Reset connector IDs to keep them stable per rebuild
   // We use a shared counter across all junctions in this rebuild
-  const connectorIdRef = { value: 1 };
+  const connectorIdRef = { value: 0 };
 
   for (const nodeId of state.nodes.keys()) {
     const segs = getNodeSegments(nodeId);
