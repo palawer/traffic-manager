@@ -15,13 +15,37 @@ Simulador de tráfico en navegador con canvas infinito para construir redes de c
 
 Abre `index.html` en un servidor local (o usa Live Server en VS Code).
 
+Opcionalmente puedes usar:
+
+```bash
+./serve.sh 8000
+```
+
+y abrir `http://localhost:8000`.
+
 PixiJS se carga desde `./pixi.min.js` incluido en el proyecto.
 
 ## Controles
 
-- `N` — herramienta nodo: click para colocar, arrastrar para mover
-- `R` — herramienta carretera: click en dos nodos para conectarlos
-- `S` — selección: click en nodo/segmento, `Supr` para borrar
+- `R` — herramienta carretera
+- `S` — seleccionar/mover
+- `C` — conectores de carril
+- `T` — semáforos
+- `A` — flechas de carril
+- `V` — límite de velocidad
+- `P` — pausar/reanudar simulación
+- Click en vacío (modo carretera): crear nodo y empezar carretera
+- Click en nodo existente (modo carretera): conectar desde él
+- Segundo click: finalizar carretera
+- `Supr`/`Backspace` — borrar nodo o segmento seleccionado
 - `Esc` — cancelar acción en curso
 - Rueda — zoom
 - `Espacio + arrastre` — mover cámara
+
+## Documentación
+
+Los documentos de proyecto están en [`docs/`](docs/):
+
+- [`docs/TODO.md`](docs/TODO.md)
+- [`docs/BUG_REPORT.md`](docs/BUG_REPORT.md)
+- [`docs/CITIES_SKYLINES_ANALYSIS.md`](docs/CITIES_SKYLINES_ANALYSIS.md)
