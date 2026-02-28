@@ -347,13 +347,18 @@ export function drawRoads() {
       );
     }
 
-    // Stop lines are drawn after connector trajectories so they stay on top.
-    pendingStopLines.push({ pt: pA, nx, ny, halfW, lw: STOP_LINE_WIDTH });
-    pendingStopLines.push({ pt: pB, nx, ny, halfW, lw: STOP_LINE_WIDTH });
+    // Stop lines — skip pass-through nodes (exactly 2 segments).
+    if (getNodeSegments(seg.nodeA).length !== 2) {
+      pendingStopLines.push({ pt: pA, nx, ny, halfW, lw: STOP_LINE_WIDTH });
+    }
+    if (getNodeSegments(seg.nodeB).length !== 2) {
+      pendingStopLines.push({ pt: pB, nx, ny, halfW, lw: STOP_LINE_WIDTH });
+    }
   }
 
-  // Draw connector paths (always visible as road markings)
-  for (const [, junc] of state.junctions) {
+  // Draw connector paths — skip pass-through nodes (exactly 2 segments).
+  for (const [nodeId, junc] of state.junctions) {
+    if (getNodeSegments(nodeId).length === 2) continue;
     for (const conn of junc.connectors) {
       const pts = conn.path.points;
       if (pts.length < 2) continue;
@@ -469,6 +474,7 @@ function drawNodes() {
   for (const node of state.nodes.values()) {
     const isSelected = (node.id === state.selectedNodeId);
     const isHovered = (node.id === state.hoveredNodeId);
+    if (!isSelected && !isHovered && getNodeSegments(node.id).length === 2) continue;
     const color = isSelected ? COLORS.nodeSelected : isHovered ? COLORS.nodeHover : COLORS.nodeDefault;
     const radius = isSelected ? NODE_RADIUS_SELECTED : NODE_RADIUS;
     nodeGraphics.circle(node.x, node.y, radius);
