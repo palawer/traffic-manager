@@ -308,7 +308,7 @@ export function drawRoads() {
     const nx = -uy, ny = ux;
     const halfW = totalWidth / 2;
 
-    // Centerline (yellow dashes if 2-way)
+    // Centerline (yellow dashes if 2-way). Pass-through bends handled by drawBendCenterline.
     if (seg.lanesAtoB > 0 && seg.lanesBtoA > 0) {
       drawDashedLine(laneMarkingsGraphics, pA, pB, 0, CENTERLINE_WIDTH, COLORS.centerline, CENTERLINE_DASH, CENTERLINE_GAP);
     }
@@ -366,6 +366,13 @@ export function drawRoads() {
       for (let i = 1; i < pts.length; i++) laneMarkingsGraphics.lineTo(pts[i].x, pts[i].y);
       laneMarkingsGraphics.stroke({ width: CONNECTOR_PATH_WIDTH, color: CONNECTOR_PATH_COLOR, alpha: CONNECTOR_PATH_ALPHA });
     }
+  }
+
+  // Solid yellow centerline through pass-through bends.
+  for (const [nodeId] of state.junctions) {
+    const segs = getNodeSegments(nodeId);
+    if (segs.length !== 2) continue;
+    drawBendCenterline(laneMarkingsGraphics, nodeId, segs);
   }
 
   // Draw stop lines above intersection trajectories.
@@ -451,6 +458,36 @@ function drawStopLine(g, pt, nx, ny, halfW, lw) {
   g.moveTo(pt.x - nx * halfW, pt.y - ny * halfW);
   g.lineTo(pt.x + nx * halfW, pt.y + ny * halfW);
   g.stroke({ width: lw, color: COLORS.stopLine, alpha: STOP_LINE_ALPHA });
+}
+
+/**
+ * Draw a solid yellow centerline through a pass-through bend (exactly 2 segments).
+ * Only drawn for bidirectional roads. Uses the same bezier geometry as drawBendJunction.
+ */
+function drawBendCenterline(g, nodeId, segs) {
+  const node = state.nodes.get(nodeId);
+  if (!node) return;
+  const [s1, s2] = segs;
+  if (!(s1.lanesAtoB > 0 && s1.lanesBtoA > 0) || !(s2.lanesAtoB > 0 && s2.lanesBtoA > 0)) return;
+
+  const other1 = state.nodes.get(s1.nodeA === nodeId ? s1.nodeB : s1.nodeA);
+  const other2 = state.nodes.get(s2.nodeA === nodeId ? s2.nodeB : s2.nodeA);
+  if (!other1 || !other2) return;
+
+  const a1 = Math.atan2(other1.y - node.y, other1.x - node.x);
+  const a2 = Math.atan2(other2.y - node.y, other2.x - node.x);
+  const len1 = Math.hypot(other1.x - node.x, other1.y - node.y) || 1;
+  const len2 = Math.hypot(other2.x - node.x, other2.y - node.y) || 1;
+  const inset1 = Math.min(junctionInset(s1, segs), Math.max(0, len1 - 5));
+  const inset2 = Math.min(junctionInset(s2, segs), Math.max(0, len2 - 5));
+
+  const from = { x: node.x + Math.cos(a1) * inset1, y: node.y + Math.sin(a1) * inset1, heading: a1 + Math.PI };
+  const to   = { x: node.x + Math.cos(a2) * inset2, y: node.y + Math.sin(a2) * inset2, heading: a2 };
+
+  const pts = buildConnectorBezier(from, to);
+  g.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+  g.stroke({ width: CENTERLINE_WIDTH, color: COLORS.centerline });
 }
 
 function drawDashedLine(g, pA, pB, offset, lw, color, dashLen, gapLen) {
