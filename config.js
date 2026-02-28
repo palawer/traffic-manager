@@ -101,7 +101,7 @@ export const COLOR_GRID_MAJOR = 0xc1d1c0; // major grid lines (every 5 cells)
 export const COLOR_ROAD          = 0x2d3138; // asphalt body used for segments and junction fills
 export const COLOR_ROAD_SHOULDER = 0x444a52; // slightly lighter edge band
 export const COLOR_CENTERLINE    = 0xe8c840; // yellow dashes separating opposing lanes
-export const COLOR_LANE_DIVIDER  = 0xdddddd; // white dashes separating same-direction lanes
+export const COLOR_LANE_DIVIDER  = 0xbbbbbb; // white dashes separating same-direction lanes
 export const COLOR_EDGE_LINE     = 0xf0f0f0; // outer edge line of the road
 
 // Nodes & selection
@@ -138,7 +138,7 @@ export const LANE_DIVIDER_GAP    = 10;  // lane-divider gap length (world px)
 
 // Crosswalk (zebra crossing) painted at the entry of each junction arm.
 // Stripes run parallel to the road and are distributed across its full width.
-export const CROSSWALK_COLOR        = 0xdddddd; // stripe color
+export const CROSSWALK_COLOR        = COLOR_LANE_DIVIDER; // stripe color
 export const CROSSWALK_STRIPE_WIDTH = 3;        // width of each stripe across the road (world px)
 export const CROSSWALK_STRIPE_GAP   = 3;        // gap between stripes across the road (world px)
 export const CROSSWALK_DEPTH        = 10;       // length of each stripe along the road direction (world px)
