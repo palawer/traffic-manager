@@ -8,8 +8,9 @@ Simulador de tráfico en navegador con canvas infinito para construir redes de c
 - Carriles multi-dirección (AtoB / BtoA) con tráfico por la derecha
 - Conectores de carril personalizables (TMPE)
 - Semáforos con fases programables
-- Pathfinding A* con selección de carril por giro planificado
+- Pathfinding A* con selección de carril basada en conectores válidos
 - Car-following con distancia mínima y colisiones con explosión
+- Protección de spawn: coches recién creados con 2 s de inmunidad (semitransparentes)
 
 ## Ejecutar
 
@@ -33,6 +34,7 @@ PixiJS se carga desde `./pixi.min.js` incluido en el proyecto.
 - `T` — semáforos
 - `V` — límite de velocidad
 - `P` — pausar/reanudar simulación
+- Botón `Debug: ON/OFF` — muestra trayectorias de carriles y conectores
 - Click en vacío (modo carretera): crear nodo y empezar carretera
 - Click en nodo existente (modo carretera): conectar desde él
 - Segundo click: finalizar carretera
@@ -40,6 +42,7 @@ PixiJS se carga desde `./pixi.min.js` incluido en el proyecto.
 - `Esc` — cancelar acción en curso
 - Rueda — zoom
 - `Espacio + arrastre` — mover cámara
+
 
 ## Documentación
 
