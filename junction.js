@@ -205,16 +205,19 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoi
       let allowed = false;
       if (sameSegment && isDeadEnd) {
         // Dead-end turn-back: keep lane index when possible.
-        allowed = (out.laneIdx === Math.min(inc.laneIdx, totalOutLanes - 1));
+        allowed = (Math.min(inc.laneIdx, totalOutLanes - 1) === out.laneIdx)
+               || (Math.min(out.laneIdx, totalInLanes - 1) === inc.laneIdx);
       } else if (isSimpleBend && !sameSegment) {
         // Two-road bend: lane continuity for all lanes.
-        allowed = (out.laneIdx === Math.min(inc.laneIdx, totalOutLanes - 1));
+        allowed = (Math.min(inc.laneIdx, totalOutLanes - 1) === out.laneIdx)
+               || (Math.min(out.laneIdx, totalInLanes - 1) === inc.laneIdx);
       } else if (turnType === "right") {
         allowed = (inc.laneIdx === 0 && out.laneIdx === 0);
       } else if (turnType === "left") {
         allowed = (inc.laneIdx === totalInLanes - 1 && out.laneIdx === totalOutLanes - 1);
       } else {
-        allowed = (out.laneIdx === Math.min(inc.laneIdx, totalOutLanes - 1));
+        allowed = (Math.min(inc.laneIdx, totalOutLanes - 1) === out.laneIdx)
+               || (Math.min(out.laneIdx, totalInLanes - 1) === inc.laneIdx);
       }
 
       if (!allowed) continue;
