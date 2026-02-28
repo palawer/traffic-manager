@@ -120,6 +120,28 @@ function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
 
   segs.sort((a, b) => a.angle - b.angle);
 
+  if (segs.length === 2) {
+    const a = segs[0];
+    const b = segs[1];
+    const pts = [a.minus, a.plus];
+
+    const arcAB = buildConnectorBezier(
+      { x: a.plus.x, y: a.plus.y, heading: a.angle + Math.PI },
+      { x: b.minus.x, y: b.minus.y, heading: b.angle }
+    );
+    for (let i = 1; i < arcAB.length; i++) pts.push(arcAB[i]);
+
+    pts.push(b.plus);
+
+    const arcBA = buildConnectorBezier(
+      { x: b.plus.x, y: b.plus.y, heading: b.angle + Math.PI },
+      { x: a.minus.x, y: a.minus.y, heading: a.angle }
+    );
+    for (let i = 1; i < arcBA.length; i++) pts.push(arcBA[i]);
+
+    return pts;
+  }
+
   // For each pair of adjacent roads, the arc from plus_i → minus_{i+1} uses the
   // same headings as the outermost right-turn connector between those roads:
   //   fromEp.heading = arrival heading of road[i]   = angle_i + π  (toward node)

@@ -251,16 +251,10 @@ export function drawRoads() {
 
   // Draw junctions
   for (const [nodeId, junc] of state.junctions) {
-    const segsAtNode = getNodeSegments(nodeId);
-    if (segsAtNode.length === 2) {
-      // Use dedicated bend fill for 2-road nodes so the join follows smooth arcs
-      // instead of closing with a diagonal polygon edge.
-      drawBendJunction(junctionGraphics, nodeId, segsAtNode);
-      continue;
-    }
     if (junc.polygon && junc.polygon.length >= 3) {
       // Use the computed junction outline for both bends and intersections.
-      // This keeps both sides consistent and follows connector geometry.
+      // This makes 2-segment joins follow the outer connector curvature
+      // instead of looking like a rounded road end-cap.
       const flat = junc.polygon.flatMap(p => [p.x, p.y]);
       junctionGraphics.poly(flat);
       junctionGraphics.fill(COLORS.junction);
