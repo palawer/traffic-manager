@@ -381,27 +381,6 @@ export function drawRoads() {
   if (state.debugLanes) {
     const lineW = DEBUG_PATH_SEGMENT_WIDTH;
     const connectorW = DEBUG_PATH_CONNECTOR_WIDTH;
-    const segLoad = new Map();
-    for (const car of state.cars) {
-      if (car.phase !== "segment") continue;
-      segLoad.set(car.segId, (segLoad.get(car.segId) || 0) + 1);
-    }
-
-    for (const seg of state.segments.values()) {
-      const ip = segmentInsetPoints(seg);
-      if (!ip) continue;
-      const count = segLoad.get(seg.id) || 0;
-      const laneCap = Math.max(1, seg.lanesAtoB + seg.lanesBtoA);
-      const ratio = Math.min(1, count / (laneCap * 2));
-      const heatColor = lerpColorHex(DEBUG_HEAT_LOW_COLOR, DEBUG_HEAT_HIGH_COLOR, ratio);
-      debugTrajectoriesGraphics.moveTo(ip.pA.x, ip.pA.y).lineTo(ip.pB.x, ip.pB.y);
-      debugTrajectoriesGraphics.stroke({
-        width: ip.totalWidth,
-        color: heatColor,
-        alpha: DEBUG_HEAT_ALPHA,
-        pixelLine: false,
-      });
-    }
 
     // 1) Segment lane centerlines: exactly where cars run on segments.
     for (const seg of state.segments.values()) {
@@ -815,36 +794,6 @@ export function drawCars() {
     const h = pose.h;
 
     const selected = car.id === state.selectedCarId;
-
-    if (state.debugLanes && pose.path) {
-      drawPathSlice(
-        carsGraphics,
-        pose.path,
-        Math.max(0, pose.s - 10),
-        24,
-        COLORS.debugLane,
-        DEBUG_CURRENT_LANE_WIDTH,
-        DEBUG_CURRENT_LANE_ALPHA
-      );
-      drawDebugFuturePath(carsGraphics, car, Math.max(30, car.speed * DEBUG_GHOST_SECONDS));
-
-      if (car.debugInvalidConnector && car.path?.points?.length > 0) {
-        const end = car.path.points[car.path.points.length - 1];
-        carsGraphics.circle(end.x, end.y, 9);
-        carsGraphics.stroke({
-          width: DEBUG_INVALID_WIDTH,
-          color: DEBUG_INVALID_COLOR,
-          alpha: DEBUG_INVALID_ALPHA,
-          pixelLine: true,
-        });
-      }
-
-      const label = makeDebugLabel(car);
-      label.x = p.x;
-      label.y = p.y - (DEBUG_TEXT_OFFSET_Y / Math.max(0.001, state.view.zoom));
-      label.scale.set(1 / Math.max(0.001, state.view.zoom));
-      carLabelsContainer.addChild(label);
-    }
 
     // Selection glow ring (drawn first, behind the car body)
     if (selected) {
