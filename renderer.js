@@ -947,8 +947,7 @@ export function updatePropertiesPanel() {
     return;
   }
   panel.style.display = "";
-  document.getElementById("atobVal").textContent = seg.lanesAtoB;
-  document.getElementById("btoaVal").textContent = seg.lanesBtoA;
+  document.getElementById("lanesVal").textContent = seg.lanesAtoB;
   document.getElementById("propSpeedBtn").textContent = `${seg.speedLimit} km/h`;
 }
 
@@ -980,14 +979,13 @@ export function setupUi() {
     saveState();
   }
   const SPEED_CYCLE = SPEED_PRESETS;
-  document.getElementById("atobMinus").addEventListener("click", () => withSeg(s => {
-    s.lanesAtoB = Math.max(1, s.lanesAtoB - 1);
+  document.getElementById("lanesMinus").addEventListener("click", () => withSeg(s => {
+    const n = Math.max(1, s.lanesAtoB - 1);
+    s.lanesAtoB = n; s.lanesBtoA = n;
   }));
-  document.getElementById("atobPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesAtoB < MAX_LANES) s.lanesAtoB++; }));
-  document.getElementById("btoaMinus").addEventListener("click", () => withSeg(s => {
-    s.lanesBtoA = Math.max(1, s.lanesBtoA - 1);
+  document.getElementById("lanesPlus").addEventListener("click", () => withSeg(s => {
+    if (s.lanesAtoB < MAX_LANES) { s.lanesAtoB++; s.lanesBtoA++; }
   }));
-  document.getElementById("btoaPlus") .addEventListener("click", () => withSeg(s => { if (s.lanesBtoA < MAX_LANES) s.lanesBtoA++; }));
   document.getElementById("propSpeedBtn").addEventListener("click", () => withSeg(s => {
     s.speedLimit = SPEED_CYCLE[(SPEED_CYCLE.indexOf(s.speedLimit) + 1) % SPEED_CYCLE.length];
   }));
