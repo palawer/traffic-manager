@@ -1,6 +1,6 @@
 import { state, JOIN_GRACE_TIME } from "./state.js";
 import {
-  SPAWN_CLEARANCE, SPAWN_MAX_ATTEMPTS,
+  SPAWN_CLEARANCE, SPAWN_MAX_ATTEMPTS, SPAWN_GRACE_TIME,
   SPEED_FACTOR_MIN, SPEED_FACTOR_RANGE,
   CAR_ACCEL, CAR_BRAKE,
   CAR_STOP_DIST, CAR_SLOW_DIST, CAR_SLOW_FACTOR,
@@ -144,7 +144,8 @@ export function spawnCar() {
     speedFactor: SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE,
     speed: 0,
     desiredSpeed: seg.speedLimit * (SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE),
-    joinGrace: 0,
+    joinGrace: SPAWN_GRACE_TIME,
+    spawnGrace: SPAWN_GRACE_TIME,
     waiting: false,
     // debug telemetry
     debugBrakeReason: "none",
@@ -176,6 +177,7 @@ export function updateCars(dt) {
 
   for (const car of state.cars) {
     car.joinGrace = Math.max(0, (car.joinGrace || 0) - dt);
+    car.spawnGrace = Math.max(0, (car.spawnGrace || 0) - dt);
 
     if (car.phase === "segment") {
       updateCarOnSegment(car, dt);

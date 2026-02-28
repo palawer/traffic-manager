@@ -76,6 +76,7 @@ export const SIGNAL_PHASE_DURATION = 5; // seconds each phase stays green before
 export const SPAWN_CLEARANCE    = 35; // spawn point must be clear within this radius (px)
 export const SPAWN_MAX_ATTEMPTS = 6;  // max spawn attempts per frame before giving up
 export const SPAWN_BATCH        = 5;  // number of cars queued per button click
+export const SPAWN_GRACE_TIME   = 2;  // seconds of collision immunity for newly spawned cars
 
 // ── Rerouting ─────────────────────────────────────────────────────────────────
 export const REROUTE_RETRY_INTERVAL = 3.0; // seconds to wait before retrying a failed reroute

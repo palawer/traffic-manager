@@ -788,11 +788,12 @@ export function drawCars() {
     const h = pose.h;
 
     const selected = car.id === state.selectedCarId;
+    const spawnAlpha = (car.spawnGrace || 0) > 0 ? 0.6 : 1;
 
     // Selection glow ring (drawn first, behind the car body)
     if (selected) {
       carsGraphics.circle(p.x, p.y, CAR_SELECTION_RADIUS);
-      carsGraphics.stroke({ width: CAR_SELECTION_STROKE, color: SPEED_LABEL_BG_COLOR, alpha: CAR_SELECTION_ALPHA });
+      carsGraphics.stroke({ width: CAR_SELECTION_STROKE, color: SPEED_LABEL_BG_COLOR, alpha: CAR_SELECTION_ALPHA * spawnAlpha });
     }
 
     const bodyPts = buildRoundedCarBodyPoints(
@@ -804,10 +805,11 @@ export function drawCars() {
       CAR_CORNER_RADIUS
     );
     carsGraphics.poly(bodyPts);
-    carsGraphics.fill(car.color);
+    carsGraphics.fill({ color: car.color, alpha: spawnAlpha });
     carsGraphics.stroke({
       width: selected ? CAR_STROKE_SELECTED_WIDTH : CAR_STROKE_WIDTH,
       color: selected ? SPEED_LABEL_BG_COLOR : COLORS.carStroke,
+      alpha: spawnAlpha,
     });
   }
 }
