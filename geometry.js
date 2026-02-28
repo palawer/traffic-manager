@@ -173,9 +173,7 @@ export function laneEndpointWorld(seg, nodes, allSegsAtNode, nodeId, laneIdx, di
   // At nodeB end: AtoB arrives from left→right, its lanes are to the right of the road axis
   // At nodeA end: the road axis from nodeA perspective is reversed
 
-  // Let's define: road axis direction = from nodeA to nodeB
-  const axisAngle = Math.atan2(other.y - node.y, other.x - node.x); // from node toward other
-  // Actually axis = from nodeA to nodeB:
+  // Road axis direction = from nodeA to nodeB
   const nodeAx = nodes.get(seg.nodeA).x, nodeAy = nodes.get(seg.nodeA).y;
   const nodeBx = nodes.get(seg.nodeB).x, nodeBy = nodes.get(seg.nodeB).y;
   const axisHeading = Math.atan2(nodeBy - nodeAy, nodeBx - nodeAx);

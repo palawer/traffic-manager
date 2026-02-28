@@ -182,10 +182,9 @@ function buildDefaultConnectors(nodeId, nodes, segsAtNode, incomingLanes, outgoi
 
   for (const inc of incomingLanes) {
     const inHeading = inc.ep.heading;
-    const totalInLanes = segsAtNode.find(s => s.id === inc.segId)
-      ? (inc.dir === "AtoB"
-          ? segsAtNode.find(s => s.id === inc.segId).lanesAtoB
-          : segsAtNode.find(s => s.id === inc.segId).lanesBtoA)
+    const incSeg = segsAtNode.find(s => s.id === inc.segId);
+    const totalInLanes = incSeg
+      ? (inc.dir === "AtoB" ? incSeg.lanesAtoB : incSeg.lanesBtoA)
       : 1;
     let addedForIncoming = 0;
 

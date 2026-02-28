@@ -286,7 +286,8 @@ function updateCarOnSegment(car, dt) {
     const nextStepSeg = state.segments.get(nextStep.segId);
     if (nextStepSeg) {
       const maxLane = (nextStep.dir === "AtoB" ? nextStepSeg.lanesAtoB : nextStepSeg.lanesBtoA) - 1;
-      if (maxLane >= 0 && nextStep.laneIdx > maxLane) nextStep.laneIdx = maxLane;
+      if (maxLane < 0) nextStep = null; // segment has 0 lanes — force reroute
+      else if (nextStep.laneIdx > maxLane) nextStep.laneIdx = maxLane;
     }
   }
   car.debugNextStep = nextStep ? `${nextStep.segId}:${nextStep.dir}:${nextStep.laneIdx}` : "reroute";
