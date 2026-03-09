@@ -2,12 +2,13 @@ import { state } from "./state.js";
 import { MAX_DT } from "./config.js";
 import { loadState } from "./persistence.js";
 import { rebuildJunctions } from "./network.js";
-import { importOSM } from "./osm-import.js";
+import { importOSMData } from "./osm-import.js";
 import {
   initRenderer,
   setupUi,
   applyCameraTransform,
   drawCars,
+  drawDebugRoads,
   setLiteMode,
   setMaplibreMap,
   setOsmParams,
@@ -17,7 +18,6 @@ import {
   updatePropertiesPanel,
 } from "./renderer.js";
 import { BBOX, SCALE } from "./osm-import.js";
-import { setupInput } from "./editor.js";
 import { updateCars } from "./simulation.js";
 
 init().catch(err => {
@@ -43,13 +43,30 @@ async function init() {
   const { app } = await initRenderer();
   setupUi();
 
-  if (loadState()) {
-    if (state.nodes.size > 500) initCoastline().catch(console.warn);
+  const statusEl = document.getElementById("importStatus");
+  statusEl.style.display = "";
+
+  if (loadState() && state.nodes.size > 500) {
+    // Red ya en localStorage — usar directamente
+    statusEl.textContent = "Red cargada desde caché.";
+    initCoastline().catch(console.warn);
     rebuildJunctions();
     fitViewToNetwork();
+  } else {
+    // Primera carga: importar desde el fixture local
+    try {
+      const res  = await fetch("./fixtures/menorca-sample.json");
+      const data = await res.json();
+      await importOSMData(data, msg => { statusEl.textContent = msg; });
+      await initCoastline();
+      fitViewToNetwork();
+    } catch (err) {
+      statusEl.textContent = "Error cargando red: " + err.message;
+      console.error(err);
+    }
   }
-  setupInput();
-  setupImportButton();
+
+  statusEl.style.display = "none";
 
   app.ticker.add(ticker => {
     const dt = Math.min(ticker.deltaMS / 1000, MAX_DT);
@@ -57,34 +74,12 @@ async function init() {
   });
 }
 
-function setupImportButton() {
-  const btn = document.getElementById("importOsmBtn");
-  const statusEl = document.getElementById("importStatus");
-
-  btn.addEventListener("click", async () => {
-    btn.disabled = true;
-    statusEl.style.display = "";
-
-    try {
-      setLiteMode(true);
-      await importOSM(msg => {
-        statusEl.textContent = msg;
-      });
-      await initCoastline();
-      fitViewToNetwork();
-    } catch (err) {
-      statusEl.textContent = "Error: " + err.message;
-      console.error(err);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-}
 
 function frame(dt) {
   if (!state.paused) updateCars(dt);
   updateStatus();
   updatePropertiesPanel();
   applyCameraTransform();
+  drawDebugRoads();
   drawCars();
 }

@@ -9,86 +9,9 @@
   </head>
   <body>
     <aside class="panel">
-      <h1>Traffic Manager</h1>
-      <p class="hint">Dibuja nodos y carreteras, luego spawna coches.</p>
+      <h1>Tráfico Menorca</h1>
 
-      <section>
-        <h2>Edición</h2>
-        <div id="toolbar" class="palette">
-          <button class="tool-btn" data-tool="select" title="Seleccionar (S)">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path class="filled" d="M5 3 L5 18 L9 14 L12 20.5 L14 19.5 L11 13 L16.5 13 Z"/>
-            </svg>
-          </button>
-          <button class="tool-btn" data-tool="segment" title="Carretera (R)">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <line x1="5" y1="19" x2="19" y2="5" stroke-width="3.5"/>
-              <circle cx="5" cy="19" r="2.5" class="filled"/>
-              <circle cx="19" cy="5" r="2.5" class="filled"/>
-            </svg>
-          </button>
-          <button class="tool-btn" data-tool="roundabout" title="Rotonda (O)">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="8" stroke-width="2.5" fill="none"/>
-              <path class="filled" d="M12 4 L10 7 L12 6 L14 7 Z"/>
-            </svg>
-          </button>
-        </div>
-      </section>
-
-      <section>
-        <h2>Utilidades</h2>
-        <div id="toolbar-utils" class="palette">
-          <button class="tool-btn" data-tool="connector" title="Conectores de carril (C)">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="5"  cy="17" r="2.5" class="filled"/>
-              <circle cx="19" cy="7"  r="2.5" class="filled"/>
-              <path d="M5 17 C5 10, 19 14, 19 7" stroke-width="2" fill="none"/>
-              <circle cx="5"  cy="8"  r="2.5" class="filled"/>
-              <circle cx="19" cy="17" r="2.5" class="filled"/>
-              <path d="M5 8 C5 13, 19 12, 19 17" stroke-width="1.2" fill="none"/>
-            </svg>
-          </button>
-          <button class="tool-btn" data-tool="signal" title="Semáforos (T)">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="8" y="1.5" width="8" height="21" rx="3" stroke-width="1.6"/>
-              <circle cx="12" cy="6.5" r="2.2" class="filled"/>
-              <circle cx="12" cy="12"  r="2.2" class="filled"/>
-              <circle cx="12" cy="17.5" r="2.2" class="filled"/>
-            </svg>
-          </button>
-          <button class="tool-btn" data-tool="speed" title="Límite de velocidad (V)">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="9.5" stroke-width="1.8"/>
-              <circle cx="12" cy="12" r="7" stroke-width="1" style="stroke:#cc0000;fill:none"/>
-              <line x1="12" y1="12" x2="15.5" y2="7" stroke-width="1.8"/>
-              <circle cx="12" cy="12" r="1.5" class="filled"/>
-            </svg>
-          </button>
-        </div>
-      </section>
-
-      <section id="propertiesPanel" style="display:none">
-        <h2>Segmento seleccionado</h2>
-        <div class="prop-row">
-          <span class="prop-label">Carriles</span>
-          <button class="prop-btn" id="lanesMinus">−</button>
-          <strong id="lanesVal">1</strong>
-          <button class="prop-btn" id="lanesPlus">+</button>
-        </div>
-        <div class="prop-row">
-          <span class="prop-label">Velocidad</span>
-          <button id="propSpeedBtn" style="flex:1; text-align:center">80 km/h</button>
-        </div>
-      </section>
-
-      <section>
-        <h2>Red de carreteras</h2>
-        <div class="controls">
-          <button id="importOsmBtn">Importar Menorca (OSM)</button>
-        </div>
-        <p id="importStatus" class="hint" style="display:none"></p>
-      </section>
+      <p id="importStatus" class="hint" style="display:none"></p>
 
       <section>
         <h2>Simulación</h2>
@@ -97,32 +20,11 @@
           <button id="spawnCarBtn">Spawn coches</button>
           <button id="debugLanesBtn">Debug: OFF</button>
           <button id="clearCarsBtn">Quitar coches</button>
-          <button id="clearAllBtn">Borrar todo</button>
+          <button id="clearAllBtn">Reiniciar</button>
         </div>
-        <p id="crashCount" class="crash-count">Siniestros: 0</p>
       </section>
 
-      <section>
-        <h2>Controles</h2>
-        <ul>
-          <li><strong>R</strong>: Herramienta carretera</li>
-          <li><strong>S</strong>: Seleccionar/mover</li>
-          <li>Click en vacío: crear nodo y empezar carretera</li>
-          <li>Click en nodo existente: conectar desde él</li>
-          <li>2º click: finalizar carretera</li>
-          <li><strong>T</strong>: semáforos</li>
-          <li><strong>C</strong>: conectores de carril</li>
-          <li><strong>O</strong>: rotonda</li>
-          <li><strong>V</strong>: límite de velocidad</li>
-          <li><strong>P</strong>: pausar / reanudar</li>
-          <li><strong>Supr</strong>: borrar seleccionado</li>
-          <li><strong>Esc</strong>: cancelar</li>
-          <li>Rueda: zoom</li>
-          <li>Espacio + arrastre: mover cámara</li>
-        </ul>
-      </section>
-
-      <p id="status" class="status">Modo edición</p>
+      <p id="status" class="status">Cargando red…</p>
     </aside>
 
     <main class="stage">

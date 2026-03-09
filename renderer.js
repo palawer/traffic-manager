@@ -1,33 +1,15 @@
-import { state, LANE_WIDTH, GRID, COLORS } from "./state.js";
-import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
-  CONNECTOR_PATH_WIDTH, CONNECTOR_PATH_COLOR, CONNECTOR_PATH_ALPHA,
-  DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH, DEBUG_PATH_CONNECTOR_WIDTH,
-  DEBUG_GHOST_SECONDS, DEBUG_GHOST_ALPHA, DEBUG_GHOST_WIDTH,
-  DEBUG_CURRENT_LANE_ALPHA, DEBUG_CURRENT_LANE_WIDTH,
-  DEBUG_INVALID_COLOR, DEBUG_INVALID_ALPHA, DEBUG_INVALID_WIDTH,
-  DEBUG_HEAT_LOW_COLOR, DEBUG_HEAT_HIGH_COLOR, DEBUG_HEAT_ALPHA,
-  DEBUG_TEXT_COLOR, DEBUG_TEXT_BG_COLOR, DEBUG_TEXT_BG_ALPHA, DEBUG_TEXT_SIZE, DEBUG_TEXT_OFFSET_Y,
-  CENTERLINE_WIDTH, CENTERLINE_DASH, CENTERLINE_GAP, LANE_DIVIDER_WIDTH,
-  CROSSWALK_COLOR, CROSSWALK_STRIPE_WIDTH, CROSSWALK_STRIPE_GAP, CROSSWALK_DEPTH, CROSSWALK_LANE_GAP, CROSSWALK_ALPHA,
-  GRID_LINE_WIDTH, ROAD_HOVER_STROKE_EXTRA, ROAD_HOVER_ALPHA, LANE_DIVIDER_DASH, LANE_DIVIDER_GAP,
-  NODE_STROKE_WIDTH, NODE_STROKE_COLOR, NODE_STROKE_ALPHA,
-  PREVIEW_INVALID_COLOR, PREVIEW_ALPHA, PREVIEW_SNAP_RADIUS, PREVIEW_SNAP_STROKE,
-  ROUTE_GLOW_WIDTH, ROUTE_LINE_WIDTH, ROUTE_GLOW_ALPHA, ROUTE_LINE_ALPHA,
-  ROUTE_PIN_RADIUS, ROUTE_PIN_SHADOW_ALPHA, ROUTE_PIN_FILL_ALPHA, ROUTE_PIN_BORDER_WIDTH, ROUTE_PIN_BORDER_ALPHA, ROUTE_PIN_DOT_ALPHA,
-  CAR_BODY_HALF_LENGTH, CAR_BODY_HALF_WIDTH, CAR_CORNER_RADIUS, CAR_SELECTION_RADIUS, CAR_SELECTION_STROKE, CAR_SELECTION_ALPHA, CAR_STROKE_WIDTH, CAR_STROKE_SELECTED_WIDTH,
-  EXPLOSION_RING_COLOR_START, EXPLOSION_RING_COLOR_END, EXPLOSION_SPARK_COLOR, EXPLOSION_SPARK_WIDTH,
-  ARROW_GROUP_OFFSET, ARROW_TURN_ANGLE_DIVISOR, ARROW_HEAD_LENGTH, ARROW_HEAD_WIDTH, ARROW_FILL_COLOR, ARROW_FILL_ALPHA, ARROW_HOVER_ALPHA,
-  SIGNAL_STROKE_WIDTH, SIGNAL_STROKE_COLOR, SIGNAL_STROKE_ALPHA, SIGNAL_TOOL_RING_RADIUS, SIGNAL_TOOL_RING_WIDTH, SIGNAL_TOOL_RING_COLOR, SIGNAL_TOOL_RING_ALPHA,
-  SPEED_LABEL_TEXT_COLOR, SPEED_LABEL_BG_COLOR, SPEED_LABEL_ALPHA_ACTIVE, SPEED_LABEL_ALPHA_IDLE,
-  CONNECTOR_NODE_RING_RADIUS, CONNECTOR_NODE_RING_WIDTH, CONNECTOR_NODE_RING_ALPHA, CONNECTOR_NODE_RING_COLOR, CONNECTOR_NODE_RING_HOVER_COLOR,
-  CONNECTOR_DEFAULT_COLOR, CONNECTOR_USER_ALPHA, CONNECTOR_DIM_ALPHA, CONNECTOR_WIDTH, CONNECTOR_WIDTH_SELECTED,
-  CONNECTOR_OUT_R, CONNECTOR_OUT_TARGET_R, CONNECTOR_OUT_EXTRA_R, CONNECTOR_OUT_STROKE, CONNECTOR_OUT_STROKE_COLOR,
-  CONNECTOR_TARGET_FILL_ALPHA, CONNECTOR_OUT_IDLE_ALPHA, CONNECTOR_IN_R, CONNECTOR_IN_SELECTED_R, CONNECTOR_IN_SELECTED_EXTRA_R, CONNECTOR_SELECTED_HALO_COLOR, CONNECTOR_SELECTED_HALO_WIDTH, CONNECTOR_IN_SELECTED_FILL_COLOR,
-  NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS, ZOOM_MIN, ZOOM_MAX,
-  SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_TEXT_RESOLUTION, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE, SPEED_SIGN_BORDER_ALPHA, SPEED_SIGN_BG_ALPHA,
-  ROUNDABOUT_RADIUS } from "./config.js";
-import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex, snap, sampleQuadraticBezier } from "./geometry.js";
-import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
+import { state, LANE_WIDTH, COLORS } from "./state.js";
+import { SPAWN_BATCH,
+  DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH,
+  CAR_BODY_HALF_LENGTH, CAR_BODY_HALF_WIDTH, CAR_CORNER_RADIUS,
+  CAR_SELECTION_RADIUS, CAR_SELECTION_STROKE, CAR_SELECTION_ALPHA,
+  CAR_STROKE_WIDTH, CAR_STROKE_SELECTED_WIDTH,
+  SPEED_LABEL_BG_COLOR,
+  EXPLOSION_MAX_RADIUS, EXPLOSION_RING_COLOR_START, EXPLOSION_RING_COLOR_END,
+  EXPLOSION_SPARK_COLOR, EXPLOSION_SPARK_WIDTH,
+  GRID_LINE_WIDTH, ZOOM_MIN, ZOOM_MAX } from "./config.js";
+import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
+import { rebuildJunctions, markNetworkDirty, getNodeSegments } from "./network.js";
 import { buildLanePath } from "./traversal.js";
 import { saveState } from "./persistence.js";
 
@@ -51,7 +33,8 @@ let gridGraphics = null;
 let coastlineGraphics = null;
 let junctionGraphics = null;
 let roadsDirty = true;  // fuerza redibujado la primera vez
-let lastCameraKey = ""; // detecta cambios de cámara para el grid
+let lastCameraKey = ""; // detecta cambios de cámara para el grid y debug roads
+let lastDebugState = false;
 let roadsGraphics = null;
 let laneMarkingsGraphics = null;
 let debugTrajectoriesGraphics = null;
@@ -210,7 +193,35 @@ function renderCoastline() {
   }
 }
 
+/** Dibuja los segmentos del simulador en screen-space (modo debug sobre MapLibre). */
+export function drawDebugRoads() {
+  if (!maplibreMap) return;
+
+  const cameraKey = `${maplibreMap.getCenter().lng.toFixed(4)},${maplibreMap.getCenter().lat.toFixed(4)},${maplibreMap.getZoom().toFixed(3)}`;
+  const debugChanged = state.debugLanes !== lastDebugState;
+  lastDebugState = state.debugLanes;
+
+  if (cameraKey === lastCameraKey && !debugChanged) return;
+  lastCameraKey = cameraKey;
+
+  roadsGraphics.clear();
+  if (!state.debugLanes) return;
+
+  for (const seg of state.segments.values()) {
+    const nA = state.nodes.get(seg.nodeA);
+    const nB = state.nodes.get(seg.nodeB);
+    if (!nA || !nB) continue;
+
+    const sA = worldToScreen(nA.x, nA.y);
+    const sB = worldToScreen(nB.x, nB.y);
+
+    roadsGraphics.moveTo(sA.x, sA.y).lineTo(sB.x, sB.y);
+    roadsGraphics.stroke({ width: DEBUG_PATH_SEGMENT_WIDTH, color: COLORS.debugLane, alpha: DEBUG_PATH_ALPHA, pixelLine: true });
+  }
+}
+
 export function drawGrid() {
+  if (maplibreMap) return; // MapLibre ya provee el fondo de mapa
   const cameraKey = `${state.view.x.toFixed(1)},${state.view.y.toFixed(1)},${state.view.zoom.toFixed(4)}`;
   if (cameraKey === lastCameraKey) return;
   lastCameraKey = cameraKey;
@@ -1024,25 +1035,12 @@ export function drawExplosions(dt) {
   });
 }
 
-export function updatePropertiesPanel() {
-  const panel = document.getElementById("propertiesPanel");
-  const seg = state.selectedSegId !== null ? state.segments.get(state.selectedSegId) : null;
-  if (!seg) {
-    panel.style.display = "none";
-    return;
-  }
-  panel.style.display = "";
-  document.getElementById("lanesVal").textContent = seg.lanesAtoB;
-  document.getElementById("propSpeedBtn").textContent = `${seg.speedLimit} km/h`;
-}
+export function updatePropertiesPanel() {}
 
 export function updateStatus() {
   updateSpawnButtonLabel();
   const statusEl = document.getElementById("status");
-  const toolName = { segment: "Carretera", select: "Seleccionar", speed: "Velocidad", signal: "Semáforos", connector: "Conectores" }[state.tool] || state.tool;
-  statusEl.textContent = `Herramienta: ${toolName} · Nodos: ${state.nodes.size} · Segmentos: ${state.segments.size} · Coches: ${state.cars.length}`;
-  const crashEl = document.getElementById("crashCount");
-  if (crashEl) crashEl.textContent = `Siniestros: ${state.crashes}`;
+  statusEl.textContent = `Coches: ${state.cars.length + state.pendingSpawns} · Segmentos: ${state.segments.size}`;
 }
 
 export function updateSpawnButtonLabel() {
@@ -1054,32 +1052,8 @@ export function setupUi() {
   const pauseBtn      = document.getElementById("pauseBtn");
   const spawnCarBtn   = document.getElementById("spawnCarBtn");
   const debugLanesBtn = document.getElementById("debugLanesBtn");
-
-  // Properties panel
-  function withSeg(fn) {
-    const seg = state.selectedSegId !== null ? state.segments.get(state.selectedSegId) : null;
-    if (!seg) return;
-    fn(seg);
-    markNetworkDirty();
-    saveState();
-  }
-  const SPEED_CYCLE = SPEED_PRESETS;
-  document.getElementById("lanesMinus").addEventListener("click", () => withSeg(s => {
-    const n = Math.max(1, s.lanesAtoB - 1);
-    s.lanesAtoB = n; s.lanesBtoA = n;
-  }));
-  document.getElementById("lanesPlus").addEventListener("click", () => withSeg(s => {
-    if (s.lanesAtoB < MAX_LANES) { s.lanesAtoB++; s.lanesBtoA++; }
-  }));
-  document.getElementById("propSpeedBtn").addEventListener("click", () => withSeg(s => {
-    s.speedLimit = SPEED_CYCLE[(SPEED_CYCLE.indexOf(s.speedLimit) + 1) % SPEED_CYCLE.length];
-  }));
   const clearCarsBtn  = document.getElementById("clearCarsBtn");
   const clearAllBtn   = document.getElementById("clearAllBtn");
-  document.querySelector(".panel").addEventListener("click", e => {
-    const btn = e.target.closest("button[data-tool]");
-    if (btn) setTool(btn.dataset.tool);
-  });
 
   pauseBtn.addEventListener("click", () => {
     state.paused = !state.paused;
@@ -1102,7 +1076,6 @@ export function setupUi() {
 
   clearCarsBtn.addEventListener("click", () => {
     state.cars = [];
-    state.explosions = [];
     state.pendingSpawns = 0;
     updateSpawnButtonLabel();
   });
@@ -1115,15 +1088,8 @@ export function setupUi() {
     state.laneArrows.clear();
     state.userConnectors.clear();
     state.cars = [];
-    state.explosions = [];
     state.crashes = 0;
     state.pendingSpawns = 0;
-    state.selectedNodeId = null;
-    state.selectedSegId = null;
-    state.selectedCarId = null;
-    state.drawingSegment = null;
-    state.connectorTool.editingNodeId = null;
-    state.connectorTool.selectedInKey = null;
     state.nextNodeId = 1;
     state.nextSegmentId = 1;
     state.nextConnectorId = 0;
@@ -1131,8 +1097,6 @@ export function setupUi() {
     markNetworkDirty();
     saveState();
   });
-
-  setTool("select");
 }
 
 function drawArrowGlyphs(g, cx, cy, laneHeading, arrowSet) {
