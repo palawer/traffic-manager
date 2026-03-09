@@ -25,6 +25,7 @@ export function spawnCar(nodeIds) {
   const dest = nodeIds[Math.floor(Math.random() * nodeIds.length)];
   if (dest === nid) return false;
 
+  const route = findRoute(nid, dest);
   if (!route || route.length < 2) return false;
 
   const laneSeq = routeToLaneSequence(route);
