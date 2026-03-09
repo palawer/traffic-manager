@@ -155,9 +155,10 @@ export function importOSMData(data, onProgress) {
     const speedLimit = (parseInt(way.tags.maxspeed) || SPEED_BY_HIGHWAY[hwType] || 50) / 3.6; // km/h → m/s
 
     const isOneway =
-      way.tags.oneway === "yes" ||
-      way.tags.oneway === "1"   ||
-      hwType === "motorway";
+      way.tags.oneway === "yes"          ||
+      way.tags.oneway === "1"            ||
+      hwType === "motorway"              ||
+      way.tags.junction === "roundabout"; // las rotondas son siempre de sentido único
 
     // Calcular carriles por dirección
     const totalLanes = parseInt(way.tags.lanes) || null;

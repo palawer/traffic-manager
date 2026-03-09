@@ -1,6 +1,6 @@
 import { state } from "./state.js";
 
-const KEY = "traffic_manager_v3";
+const KEY = "traffic_manager_v4";
 const SAVE_MIN_INTERVAL_MS = 250;
 let lastSaveAt = 0;
 let saveTimer = null;
