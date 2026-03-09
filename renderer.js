@@ -52,6 +52,7 @@ let carsGraphics = null;
 let explosionGraphics = null;
 let carLabelsContainer = null;
 let speedLabelsContainer = null;
+let routeLabelContainer = null;
 
 export async function initRenderer() {
   const stageEl  = document.getElementById("pixi-canvas");
@@ -84,6 +85,7 @@ export async function initRenderer() {
   explosionGraphics  = new PIXI.Graphics();
   carLabelsContainer = new PIXI.Container();
   speedLabelsContainer = new PIXI.Container();
+  routeLabelContainer = new PIXI.Container();
 
   camera.addChild(gridGraphics);
   camera.addChild(coastlineGraphics);
@@ -103,6 +105,7 @@ export async function initRenderer() {
   camera.addChild(carLabelsContainer);
   camera.addChild(routePinGraphics);
   app.stage.addChild(camera);
+  app.stage.addChild(routeLabelContainer);
 
   return { app };
 }
@@ -698,6 +701,7 @@ export function drawPreview() {
 export function drawSelectedCarRoute() {
   routeGraphics.clear();
   routePinGraphics.clear();
+  routeLabelContainer.removeChildren();
   if (state.selectedCarId === null) return;
   const car = state.cars.find(c => c.id === state.selectedCarId);
   if (!car) { state.selectedCarId = null; return; }
@@ -799,6 +803,49 @@ export function drawSelectedCarRoute() {
       routePinGraphics.circle(dp.x, dp.y, pinR * 0.35);
       routePinGraphics.fill({ color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_DOT_ALPHA });
     }
+  }
+
+  // Label: distancia y tiempo restantes junto al coche
+  if (car.path && car.laneSeq) {
+    // Distancia restante en el segmento actual
+    let remainM = car.path.length - car.s;
+    // Sumar segmentos futuros
+    for (let i = car.routeStep + 1; i < car.laneSeq.length; i++) {
+      const step = car.laneSeq[i];
+      const seg  = state.segments.get(step.segId);
+      if (!seg) continue;
+      const p = buildLanePath(seg, state.nodes, step.dir, step.laneIdx);
+      if (p) remainM += p.length;
+    }
+    const avgSpeed = Math.max(car.speed, car.desiredSpeed || 1, 1);
+    const timeSec  = remainM / avgSpeed;
+
+    const distTxt = remainM >= 1000
+      ? `${(remainM / 1000).toFixed(1)} km`
+      : `${Math.round(remainM)} m`;
+    const timeTxt = timeSec >= 3600
+      ? `${Math.floor(timeSec / 3600)}h ${Math.floor((timeSec % 3600) / 60)}min`
+      : timeSec >= 60
+        ? `${Math.floor(timeSec / 60)}min`
+        : `${Math.round(timeSec)}s`;
+
+    const carScreenPos = maplibreMap
+      ? worldToScreen(pointAtPath(car.path, car.s).x, pointAtPath(car.path, car.s).y)
+      : pointAtPath(car.path, car.s);
+
+    const label = new PIXI.Text({
+      text: `${distTxt}  ·  ${timeTxt}`,
+      style: {
+        fontSize: 13,
+        fill: 0xffffff,
+        fontFamily: "sans-serif",
+        fontWeight: "bold",
+        stroke: { color: 0x000000, width: 3 },
+      },
+    });
+    label.x = carScreenPos.x + 14;
+    label.y = carScreenPos.y - 10;
+    routeLabelContainer.addChild(label);
   }
 }
 
@@ -974,6 +1021,14 @@ export function drawCars() {
       const dx = aheadP.x - p.x, dy = aheadP.y - p.y;
       if (dx * dx + dy * dy > 0.1) h = Math.atan2(dy, dx);
     }
+
+    // Suavizar heading con filtro exponencial (evita giros bruscos entre segmentos)
+    if (car._renderH === undefined) car._renderH = h;
+    let diff = h - car._renderH;
+    while (diff >  Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    car._renderH += diff * 0.25;
+    h = car._renderH;
 
     const selected   = car.id === state.selectedCarId;
     const spawnAlpha = (car.spawnGrace || 0) > 0 ? 0.6 : 1;
