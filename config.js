@@ -1,6 +1,3 @@
-// ── Road geometry ─────────────────────────────────────────────────────────────
-export const LANE_WIDTH = 14; // width of one lane in world px
-
 // ── Timing ────────────────────────────────────────────────────────────────────
 export const MAX_DT = 0.05; // max simulated seconds per frame
 
@@ -58,6 +55,3 @@ export const SPEED_LABEL_BG_COLOR   = 0xffffff;
 export const DEBUG_PATH_ALPHA         = 1.0;
 export const DEBUG_PATH_SEGMENT_WIDTH = 2.2;
 
-// ── Camera ────────────────────────────────────────────────────────────────────
-export const ZOOM_MIN = 0.02;
-export const ZOOM_MAX = 8.0;

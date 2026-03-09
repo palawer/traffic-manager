@@ -1,4 +1,3 @@
-export { LANE_WIDTH } from "./config.js";
 import { COLOR_CAR_STROKE } from "./config.js";
 
 export const COLORS = {

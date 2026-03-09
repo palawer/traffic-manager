@@ -1,11 +1,10 @@
-import { state, LANE_WIDTH, COLORS } from "./state.js";
+import { state, COLORS } from "./state.js";
 import { SPAWN_BATCH,
   DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH,
   CAR_BODY_HALF_LENGTH, CAR_BODY_HALF_WIDTH, CAR_CORNER_RADIUS,
   CAR_SELECTION_RADIUS, CAR_SELECTION_STROKE, CAR_SELECTION_ALPHA,
   CAR_STROKE_WIDTH, CAR_STROKE_SELECTED_WIDTH,
   SPEED_LABEL_BG_COLOR,
-  ZOOM_MIN, ZOOM_MAX,
   ROUTE_GLOW_WIDTH, ROUTE_LINE_WIDTH, ROUTE_GLOW_ALPHA, ROUTE_LINE_ALPHA,
   ROUTE_PIN_RADIUS, ROUTE_PIN_SHADOW_ALPHA, ROUTE_PIN_FILL_ALPHA,
   ROUTE_PIN_BORDER_WIDTH, ROUTE_PIN_BORDER_ALPHA, ROUTE_PIN_DOT_ALPHA,
@@ -419,36 +418,5 @@ export function fitViewToNetwork() {
     return true;
   }
 
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const n of state.nodes.values()) {
-    if (n.x < minX) minX = n.x;
-    if (n.y < minY) minY = n.y;
-    if (n.x > maxX) maxX = n.x;
-    if (n.y > maxY) maxY = n.y;
-  }
-
-  let maxRoadHalf = LANE_WIDTH;
-  for (const seg of state.segments.values()) {
-    const half = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH * 0.5;
-    if (half > maxRoadHalf) maxRoadHalf = half;
-  }
-  const worldPad = maxRoadHalf + 20;
-  minX -= worldPad; minY -= worldPad;
-  maxX += worldPad; maxY += worldPad;
-
-  const boundsW = Math.max(1, maxX - minX);
-  const boundsH = Math.max(1, maxY - minY);
-  const { width, height } = rendererSize();
-  const screenPad = 48;
-  const usableW = Math.max(1, width - screenPad * 2);
-  const usableH = Math.max(1, height - screenPad * 2);
-
-  const zoomX = usableW / boundsW;
-  const zoomY = usableH / boundsH;
-  const zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(zoomX, zoomY)));
-
-  state.view.x = (minX + maxX) * 0.5;
-  state.view.y = (minY + maxY) * 0.5;
-  state.view.zoom = zoom;
-  return true;
+  return false;
 }
