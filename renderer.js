@@ -1031,7 +1031,7 @@ export function drawCars() {
     h = car._renderH;
 
     const selected   = car.id === state.selectedCarId;
-    const spawnAlpha = (car.spawnGrace || 0) > 0 ? 0.6 : 1;
+    const spawnAlpha = 1;
 
     if (selected) {
       carsGraphics.circle(p.x, p.y, selR);
