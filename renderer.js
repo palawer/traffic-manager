@@ -56,8 +56,15 @@ export async function initRenderer() {
   selectionGraphics   = new PIXI.Graphics();
   routeLabelContainer = new PIXI.Container();
 
-  // ParticleContainer for cars — single GPU batch for all car sprites
-  particleContainer = new PIXI.ParticleContainer({ dynamicProperties: { position: true, rotation: true, color: true, scale: true } });
+  // Build car texture first (white rounded rect, tinted per car at draw time)
+  const tg = new PIXI.Graphics();
+  tg.roundRect(0, 0, CAR_BODY_HALF_LENGTH * 2, CAR_BODY_HALF_WIDTH * 2, CAR_CORNER_RADIUS);
+  tg.fill(0xffffff);
+  carTexture = app.renderer.generateTexture(tg);
+  tg.destroy();
+
+  // Container for car sprites — PixiJS v8 auto-batches same-texture sprites
+  particleContainer = new PIXI.Container();
 
   camera.addChild(roadsGraphics);
   camera.addChild(routeGraphics);
@@ -66,13 +73,6 @@ export async function initRenderer() {
   camera.addChild(routePinGraphics);
   app.stage.addChild(camera);
   app.stage.addChild(routeLabelContainer);
-
-  // Build car texture: white rounded rect, tinted per car at draw time
-  const tg = new PIXI.Graphics();
-  tg.roundRect(0, 0, CAR_BODY_HALF_LENGTH * 2, CAR_BODY_HALF_WIDTH * 2, CAR_CORNER_RADIUS);
-  tg.fill(0xffffff);
-  carTexture = app.renderer.generateTexture(tg);
-  tg.destroy();
 
   return { app };
 }
@@ -296,7 +296,7 @@ export function drawCars() {
   const currentIds = new Set(state.cars.map(c => c.id));
   for (const [id, particle] of _carParticles) {
     if (!currentIds.has(id)) {
-      particleContainer.removeParticle(particle);
+      particleContainer.removeChild(particle);
       _particlePool.push(particle);
       _carParticles.delete(id);
     }
@@ -321,20 +321,23 @@ export function drawCars() {
     while (diff < -Math.PI) diff += 2 * Math.PI;
     car._renderH += diff * 0.25;
 
-    // Acquire or reuse particle
+    // Acquire or reuse sprite
     let particle = _carParticles.get(car.id);
     if (!particle) {
-      particle = _particlePool.pop() ?? new PIXI.Particle({ texture: carTexture, anchorX: 0.5, anchorY: 0.5 });
-      particleContainer.addParticle(particle);
+      particle = _particlePool.pop();
+      if (!particle) {
+        particle = new PIXI.Sprite(carTexture);
+        particle.anchor.set(0.5);
+      }
+      particleContainer.addChild(particle);
       _carParticles.set(car.id, particle);
     }
 
     particle.x        = p.x;
     particle.y        = p.y;
     particle.rotation = car._renderH;
-    particle.scaleX   = scaleX;
-    particle.scaleY   = scaleY;
-    particle.color    = car.color;
+    particle.scale.set(scaleX, scaleY);
+    particle.tint     = car.color;
 
     if (car.id === state.selectedCarId) {
       selectionGraphics.circle(p.x, p.y, selR);
