@@ -47,6 +47,8 @@ export function spawnCar(shuffledNodeIds) {
   const lanePath = buildLanePath(seg, state.nodes, firstStep.dir, firstStep.laneIdx);
   if (!lanePath || lanePath.length < 1) return false;
 
+  const spawnSpeed = seg.speedLimit * (SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE);
+
   // No clearance check — spawn grace period handles overlapping at birth
 
   const car = {
@@ -62,10 +64,10 @@ export function spawnCar(shuffledNodeIds) {
     laneIdx: firstStep.laneIdx,
     s: 0,
     path: lanePath,
-    // motion
+    // motion — spawn at full desired speed to avoid slow-start effect
     speedFactor: SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE,
-    speed: 0,
-    desiredSpeed: seg.speedLimit * (SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE),
+    speed: spawnSpeed,
+    desiredSpeed: spawnSpeed,
     spawnGrace: SPAWN_GRACE_TIME,
     waiting: false,
     // debug telemetry
