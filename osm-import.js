@@ -152,7 +152,7 @@ export function importOSMData(data, onProgress) {
 
   for (const way of osmWays) {
     const hwType = way.tags.highway;
-    const speedLimit = parseInt(way.tags.maxspeed) || SPEED_BY_HIGHWAY[hwType] || 50;
+    const speedLimit = (parseInt(way.tags.maxspeed) || SPEED_BY_HIGHWAY[hwType] || 50) / 3.6; // km/h → m/s
 
     const isOneway =
       way.tags.oneway === "yes" ||

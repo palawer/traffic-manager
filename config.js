@@ -56,8 +56,8 @@ export const SPEED_FACTOR_MIN   = 0.85; // slowest driver as a fraction of the s
 export const SPEED_FACTOR_RANGE = 0.20; // random range added on top → max factor = 1.05
 
 // ── Car dynamics ──────────────────────────────────────────────────────────────
-export const CAR_ACCEL = 60;  // acceleration rate (px/s²)
-export const CAR_BRAKE = 100; // deceleration rate (px/s²)
+export const CAR_ACCEL = 4;   // acceleration rate (m/s²) — ~0 a 90km/h en 6s
+export const CAR_BRAKE = 7;   // deceleration rate (m/s²) — frenada confortable
 
 // ── Car following (IDM-lite) ──────────────────────────────────────────────────
 export const CAR_STOP_DIST  = 16;  // gap to obstacle that triggers a full stop (px)

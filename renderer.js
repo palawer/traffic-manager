@@ -221,12 +221,21 @@ export function drawDebugRoads() {
     }
   }
 
+  // Color por velocidad (speedLimit en m/s)
+  function speedColor(mps) {
+    if (mps >= 30)  return 0xe74c3c; // motorway  ≥108 km/h — rojo
+    if (mps >= 25)  return 0xe67e22; // primary    ~90 km/h — naranja
+    if (mps >= 20)  return 0xf1c40f; // secondary  ~80 km/h — amarillo
+    if (mps >= 14)  return 0x2ecc71; // tertiary   ~60 km/h — verde
+    return           0x3498db;        // residential ≤50 km/h — azul
+  }
+
   // Un path por segmento (geometría OSM real)
   for (const seg of state.segments.values()) {
     const path = buildLanePath(seg, state.nodes, "AtoB", 0);
     if (!path || path.points.length < 2) continue;
     drawPath(path.points);
-    roadsGraphics.stroke({ width: DEBUG_PATH_SEGMENT_WIDTH, color: COLORS.debugLane, alpha: DEBUG_PATH_ALPHA, pixelLine: true });
+    roadsGraphics.stroke({ width: DEBUG_PATH_SEGMENT_WIDTH, color: speedColor(seg.speedLimit), alpha: DEBUG_PATH_ALPHA, pixelLine: true });
   }
 
 }
