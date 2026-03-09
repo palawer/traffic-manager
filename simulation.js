@@ -43,7 +43,7 @@ export function spawnCar(nodeIds) {
   // No clearance check — spawn grace period handles overlapping at birth
 
   const car = {
-    id: Math.random().toString(36).slice(2, 9),
+    id: state.nextCarId++,
     color: hslToHex(Math.random() * 360, 0.7, 0.52),
     // route
     route,
@@ -79,7 +79,8 @@ export function spawnCar(nodeIds) {
 function buildLaneIndex(cars) {
   const index = new Map();
   for (const car of cars) {
-    const key = `${car.segId}|${car.dir}|${car.laneIdx}`;
+    // Clave numérica: evita ~120k allocaciones de string por frame
+    const key = car.segId * 8 + (car.dir === "AtoB" ? 0 : 4) + car.laneIdx;
     let lane = index.get(key);
     if (!lane) { lane = []; index.set(key, lane); }
     lane.push(car);

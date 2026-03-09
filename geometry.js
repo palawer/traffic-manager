@@ -35,13 +35,15 @@ export function pointAtPath(path, s) {
   if (path.points.length === 0) return { x: 0, y: 0 };
   if (s <= 0) return path.points[0];
   if (s >= path.length) return path.points[path.points.length - 1];
-  let i = 1;
-  while (i < path.cumulative.length && path.cumulative[i] < s) i++;
-  const p0 = path.points[i - 1];
-  const p1 = path.points[i];
-  const s0 = path.cumulative[i - 1];
-  const s1 = path.cumulative[i];
-  const t = (s - s0) / (s1 - s0 || 1);
+  // Búsqueda binaria — O(log N) en lugar de O(N)
+  let lo = 0, hi = path.cumulative.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (path.cumulative[mid] < s) lo = mid; else hi = mid;
+  }
+  const p0 = path.points[lo];
+  const p1 = path.points[hi];
+  const t = (s - path.cumulative[lo]) / (path.cumulative[hi] - path.cumulative[lo] || 1);
   return { x: p0.x + (p1.x - p0.x) * t, y: p0.y + (p1.y - p0.y) * t };
 }
 

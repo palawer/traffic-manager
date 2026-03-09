@@ -8,7 +8,7 @@ import { SPAWN_BATCH,
   ROUTE_PIN_RADIUS, ROUTE_PIN_SHADOW_ALPHA, ROUTE_PIN_FILL_ALPHA,
   ROUTE_PIN_BORDER_WIDTH, ROUTE_PIN_BORDER_ALPHA, ROUTE_PIN_DOT_ALPHA,
   NODE_STROKE_COLOR } from "./config.js";
-import { pointAtPath, headingAtPath } from "./geometry.js";
+import { pointAtPath } from "./geometry.js";
 import { buildLanePath } from "./traversal.js";
 
 const app = new PIXI.Application();
@@ -25,6 +25,8 @@ export function setMaplibreMap(map) { maplibreMap = map; }
 
 // Escala actual: screen px por world px. Se actualiza en applyCameraTransform.
 let mapScale = 1;
+// Caché de transformación afín: evita llamadas project() por coche en cada frame.
+let _affine = null; // { kxx, kxy, kyx, kyy, tx, ty }
 let roadsGraphics = null;
 let routeGraphics = null;
 let routePinGraphics = null;
@@ -82,6 +84,12 @@ function rendererSize() {
 }
 
 export function worldToScreen(x, y) {
+  if (_affine) {
+    return {
+      x: x * _affine.kxx + y * _affine.kxy + _affine.tx,
+      y: x * _affine.kyx + y * _affine.kyy + _affine.ty,
+    };
+  }
   if (maplibreMap) {
     const { BBOX, SCALE } = _osmParams;
     const lon = BBOX.minLon + x / SCALE;
@@ -118,22 +126,29 @@ export function setOsmParams(bbox, scale) { _osmParams = { BBOX: bbox, SCALE: sc
 
 export function applyCameraTransform() {
   if (maplibreMap) {
-    // Compute mapScale empirically: screen px per world px (= screen px per meter N-S).
-    // This avoids the 256 vs 512 tile-size ambiguity in the zoom formula.
+    // Derivar transformación afín completa desde 3 llamadas project().
+    // Esto reemplaza el cálculo por coche — ~360k llamadas/frame evitadas.
     if (_osmParams.BBOX) {
       const { BBOX, SCALE } = _osmParams;
-      const cx = (BBOX.minLon + BBOX.maxLon) / 2;
-      const cy = (BBOX.minLat + BBOX.maxLat) / 2;
-      const wx = (cx - BBOX.minLon) * SCALE;
-      const wy = (BBOX.maxLat - cy) * SCALE;
-      const s0 = worldToScreen(wx, wy);
-      const s1 = worldToScreen(wx, wy + 1); // 1 world px south = 1 metre
-      mapScale = Math.hypot(s1.x - s0.x, s1.y - s0.y);
+      const p00 = maplibreMap.project([BBOX.minLon, BBOX.maxLat]);
+      const p10 = maplibreMap.project([BBOX.minLon + 1 / SCALE, BBOX.maxLat]);
+      const p01 = maplibreMap.project([BBOX.minLon, BBOX.maxLat - 1 / SCALE]);
+      _affine = {
+        kxx: p10.x - p00.x,
+        kxy: p01.x - p00.x,
+        kyx: p10.y - p00.y,
+        kyy: p01.y - p00.y,
+        tx: p00.x,
+        ty: p00.y,
+      };
+      mapScale = Math.hypot(p01.x - p00.x, p01.y - p00.y);
     }
     camera.scale.set(1);
     camera.position.set(0, 0);
     return;
   }
+  // Sin mapa — invalidar caché afín
+  _affine = null;
   const { width, height } = rendererSize();
   camera.scale.set(state.view.zoom, state.view.zoom);
   camera.position.set(
@@ -284,15 +299,6 @@ export function drawSelectedCarRoute() {
   }
 }
 
-function getCarPose(car) {
-  return {
-    p: pointAtPath(car.path, car.s),
-    h: headingAtPath(car.path, car.s),
-    path: car.path,
-    s: car.s,
-  };
-}
-
 export function drawCars() {
   selectionGraphics.clear();
 
@@ -311,18 +317,15 @@ export function drawCars() {
   }
 
   for (const car of state.cars) {
-    const pose = getCarPose(car);
-    const p = maplibreMap ? worldToScreen(pose.p.x, pose.p.y) : pose.p;
+    // Inline pose — reduce pointAtPath calls from 4 a 2 por coche
+    const wp     = pointAtPath(car.path, car.s);
+    const aheadS = Math.min(car.s + 2, car.path.length - 0.001);
+    const aheadW = pointAtPath(car.path, aheadS);
+    const p      = worldToScreen(wp.x, wp.y);
+    const aheadP = worldToScreen(aheadW.x, aheadW.y);
+    const dx = aheadP.x - p.x, dy = aheadP.y - p.y;
+    let h = (dx * dx + dy * dy > 0.1) ? Math.atan2(dy, dx) : Math.atan2(aheadW.y - wp.y, aheadW.x - wp.x);
 
-    // Screen-space heading
-    let h = pose.h;
-    if (maplibreMap && pose.path) {
-      const aheadS = Math.min(pose.s + 2, pose.path.length - 0.001);
-      const aheadW = pointAtPath(pose.path, aheadS);
-      const aheadP = worldToScreen(aheadW.x, aheadW.y);
-      const dx = aheadP.x - p.x, dy = aheadP.y - p.y;
-      if (dx * dx + dy * dy > 0.1) h = Math.atan2(dy, dx);
-    }
     if (car._renderH === undefined) car._renderH = h;
     let diff = h - car._renderH;
     while (diff >  Math.PI) diff -= 2 * Math.PI;

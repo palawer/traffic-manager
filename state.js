@@ -4,6 +4,7 @@ export const state = {
   segments: new Map(),       // id → { id, nodeA, nodeB, lanesAtoB, lanesBtoA, speedLimit }
   nextNodeId: 1,
   nextSegmentId: 1,
+  nextCarId: 0,              // contador entero para IDs de coches — evita string hashing en Map
   cars: [],
   pendingSpawns: 0,
   networkDirty: true,
