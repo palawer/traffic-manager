@@ -1,5 +1,4 @@
 import { state } from "./state.js";
-import { buildJunction } from "./junction.js";
 
 let nodeSegmentsCache = null;
 let cacheNodesRef = null;
@@ -26,55 +25,12 @@ function ensureNodeSegmentsCache() {
   }
 }
 
-/** Remove laneArrow entries that reference a deleted segment */
-function pruneLaneArrowsForSeg(segId) {
-  for (const key of state.laneArrows.keys()) {
-    if (parseInt(key.split(":")[0]) === segId) state.laneArrows.delete(key);
-  }
-}
-
-/** Remove userConnector entries that reference a deleted segment */
-function pruneUserConnectorsForSeg(segId) {
-  for (const [nodeId, nodeMap] of state.userConnectors) {
-    for (const [inKey, outSet] of nodeMap) {
-      if (parseInt(inKey.split(":")[0]) === segId) {
-        nodeMap.delete(inKey);
-        continue;
-      }
-      for (const outKey of outSet) {
-        if (parseInt(outKey.split(":")[0]) === segId) outSet.delete(outKey);
-      }
-      if (outSet.size === 0) nodeMap.delete(inKey);
-    }
-    if (nodeMap.size === 0) state.userConnectors.delete(nodeId);
-  }
-}
-
 export function addNode(x, y) {
   const id = state.nextNodeId++;
   state.nodes.set(id, { id, x, y });
   invalidateNodeSegmentsCache();
   state.networkDirty = true;
   return id;
-}
-
-export function removeNode(nodeId) {
-  state.nodes.delete(nodeId);
-  state.junctions.delete(nodeId);
-  state.signals.delete(nodeId);
-  state.userConnectors.delete(nodeId);
-  // Remove all segments connected to this node
-  for (const [segId, seg] of state.segments) {
-    if (seg.nodeA === nodeId || seg.nodeB === nodeId) {
-      state.segments.delete(segId);
-      pruneLaneArrowsForSeg(segId);
-      pruneUserConnectorsForSeg(segId);
-      const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
-      state.junctions.delete(otherId);
-    }
-  }
-  invalidateNodeSegmentsCache();
-  state.networkDirty = true;
 }
 
 export function addSegment(nodeAId, nodeBId, lanesAtoB = 1, lanesBtoA = 1, speedLimit = 80, geometry = null) {
@@ -92,68 +48,14 @@ export function addSegment(nodeAId, nodeBId, lanesAtoB = 1, lanesBtoA = 1, speed
   return id;
 }
 
-export function removeSegment(segId) {
-  const seg = state.segments.get(segId);
-  if (!seg) return;
-  state.segments.delete(segId);
-  pruneLaneArrowsForSeg(segId);
-  pruneUserConnectorsForSeg(segId);
-  state.junctions.delete(seg.nodeA);
-  state.junctions.delete(seg.nodeB);
-  invalidateNodeSegmentsCache();
-  // Remove signals for nodes that no longer have any connected segments
-  if (getNodeSegments(seg.nodeA).length === 0) state.signals.delete(seg.nodeA);
-  if (getNodeSegments(seg.nodeB).length === 0) state.signals.delete(seg.nodeB);
-  state.networkDirty = true;
-}
-
 /** Returns all segments connected to a node */
 export function getNodeSegments(nodeId) {
   ensureNodeSegmentsCache();
   return nodeSegmentsCache.get(nodeId) || [];
 }
 
-/** Rebuild junction polygons and lane connectors for all nodes */
-export function rebuildJunctions() {
-  state.junctions.clear();
-  // Reset connector IDs to keep them stable per rebuild
-  // We use a shared counter across all junctions in this rebuild
-  const connectorIdRef = { value: 0 };
-
-  for (const nodeId of state.nodes.keys()) {
-    const segs = getNodeSegments(nodeId);
-    if (segs.length === 0) continue;
-    const junction = buildJunction(nodeId, state.nodes, segs, connectorIdRef, state.userConnectors.get(nodeId));
-    state.junctions.set(nodeId, junction);
-  }
-  state.nextConnectorId = connectorIdRef.value;
-  state.networkDirty = false;
-}
-
 export function markNetworkDirty() {
   state.networkDirty = true;
-}
-
-/**
- * Given a car arriving at nodeId from inSegId/inDir/inLane,
- * find the connector that leads to outSegId/outDir/outLane (if provided),
- * or else return the first matching connector.
- */
-export function findConnector(nodeId, inSegId, inDir, inLane, outSegId, outDir, outLane) {
-  const junc = state.junctions.get(nodeId);
-  if (!junc) return null;
-  let sameSegFallback = null;
-  for (const conn of junc.connectors) {
-    if (conn.inSegId !== inSegId || conn.inDir !== inDir || conn.inLane !== inLane) continue;
-    if (outSegId === undefined) return conn; // no filter — first match
-    if (conn.outSegId === outSegId && conn.outDir === outDir) {
-      if (outLane === undefined || conn.outLane === outLane) return conn; // exact match
-      if (!sameSegFallback) sameSegFallback = conn; // same road, different lane
-    }
-  }
-  // Only fall back to a connector that goes to the correct outSeg.
-  // Never return a connector that sends the car to the wrong segment.
-  return sameSegFallback;
 }
 
 /**
@@ -162,11 +64,4 @@ export function findConnector(nodeId, inSegId, inDir, inLane, outSegId, outDir, 
  */
 export function getDestinationNode(seg, dir) {
   return dir === "AtoB" ? seg.nodeB : seg.nodeA;
-}
-
-/**
- * Find the node at the start of a segment (given seg + dir of travel).
- */
-export function getSourceNode(seg, dir) {
-  return dir === "AtoB" ? seg.nodeA : seg.nodeB;
 }

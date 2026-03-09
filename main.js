@@ -30,7 +30,7 @@ async function init() {
   // Inicializar MapLibre
   const map = new maplibregl.Map({
     container: "map",
-    style: "https://tiles.openfreemap.org/styles/liberty",
+    style: "https://tiles.openfreemap.org/styles/bright",
     center: [4.075, 39.965],
     zoom: 10,
   });
