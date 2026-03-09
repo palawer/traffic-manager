@@ -1,15 +1,3 @@
-import { GRID } from "./state.js";
-
-export function snap(v, step = GRID) {
-  return Math.round(v / step) * step;
-}
-
-export function normalizeAngle(a) {
-  while (a <= -Math.PI) a += Math.PI * 2;
-  while (a > Math.PI) a -= Math.PI * 2;
-  return a;
-}
-
 export function hslToHex(h, s, l) {
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const hp = h / 60;
@@ -61,13 +49,4 @@ export function headingAtPath(path, s) {
   const a = pointAtPath(path, Math.max(0, s - 2));
   const b = pointAtPath(path, Math.min(path.length, s + 2));
   return Math.atan2(b.y - a.y, b.x - a.x);
-}
-
-export function bezierPoint(p0, p1, p2, p3, t) {
-  const u = 1 - t;
-  const uu = u * u, tt = t * t, uuu = uu * u, ttt = tt * t;
-  return {
-    x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
-    y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y,
-  };
 }

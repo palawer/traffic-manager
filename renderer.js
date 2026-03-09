@@ -5,13 +5,12 @@ import { SPAWN_BATCH,
   CAR_SELECTION_RADIUS, CAR_SELECTION_STROKE, CAR_SELECTION_ALPHA,
   CAR_STROKE_WIDTH, CAR_STROKE_SELECTED_WIDTH,
   SPEED_LABEL_BG_COLOR,
-  GRID_LINE_WIDTH, ZOOM_MIN, ZOOM_MAX,
+  ZOOM_MIN, ZOOM_MAX,
   ROUTE_GLOW_WIDTH, ROUTE_LINE_WIDTH, ROUTE_GLOW_ALPHA, ROUTE_LINE_ALPHA,
   ROUTE_PIN_RADIUS, ROUTE_PIN_SHADOW_ALPHA, ROUTE_PIN_FILL_ALPHA,
   ROUTE_PIN_BORDER_WIDTH, ROUTE_PIN_BORDER_ALPHA, ROUTE_PIN_DOT_ALPHA,
-  NODE_STROKE_WIDTH, NODE_STROKE_COLOR, NODE_STROKE_ALPHA } from "./config.js";
-import { pointAtPath, headingAtPath, hslToHex } from "./geometry.js";
-import { markNetworkDirty } from "./network.js";
+  NODE_STROKE_COLOR } from "./config.js";
+import { pointAtPath, headingAtPath } from "./geometry.js";
 import { buildLanePath } from "./traversal.js";
 
 const app = new PIXI.Application();
@@ -28,8 +27,6 @@ export function setMaplibreMap(map) { maplibreMap = map; }
 
 // Escala actual: screen px por world px. Se actualiza en applyCameraTransform.
 let mapScale = 1;
-let gridGraphics = null;
-let coastlineGraphics = null;
 let roadsGraphics = null;
 let routeGraphics = null;
 let routePinGraphics = null;
@@ -51,8 +48,6 @@ export async function initRenderer() {
   canvas = stageEl;
 
   camera = new PIXI.Container();
-  gridGraphics       = new PIXI.Graphics();
-  coastlineGraphics  = new PIXI.Graphics();
   roadsGraphics      = new PIXI.Graphics();
   routeGraphics      = new PIXI.Graphics();
   routePinGraphics   = new PIXI.Graphics();
@@ -60,8 +55,6 @@ export async function initRenderer() {
   carLabelsContainer = new PIXI.Container();
   routeLabelContainer = new PIXI.Container();
 
-  camera.addChild(gridGraphics);
-  camera.addChild(coastlineGraphics);
   camera.addChild(roadsGraphics);
   camera.addChild(routeGraphics);
   camera.addChild(carsGraphics);
@@ -130,34 +123,6 @@ export function applyCameraTransform() {
   );
 }
 
-// Color de la línea de costa
-const COASTLINE_COLOR = 0x4a90a4;
-const COASTLINE_WIDTH = 3;
-const COASTLINE_FILL  = 0xd4e8c2;
-const SEA_COLOR       = 0xb8d4e8;
-
-let coastlineChains = null;
-
-/** Carga la línea de costa y la pinta. Solo dibuja si hay datos. */
-export async function initCoastline() {
-  const { loadCoastline } = await import("./coastline.js");
-  coastlineChains = await loadCoastline();
-  renderCoastline();
-}
-
-function renderCoastline() {
-  coastlineGraphics.clear();
-  if (!coastlineChains) return;
-
-  for (const chain of coastlineChains) {
-    const pts = chain.points;
-    if (pts.length < 2) continue;
-    coastlineGraphics.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) coastlineGraphics.lineTo(pts[i].x, pts[i].y);
-    if (chain.closed) coastlineGraphics.closePath();
-    coastlineGraphics.stroke({ width: COASTLINE_WIDTH, color: COASTLINE_COLOR });
-  }
-}
 
 /** Dibuja los paths reales de carril en screen-space (modo debug). */
 export function drawDebugRoads() {
@@ -193,26 +158,6 @@ export function drawDebugRoads() {
   }
 }
 
-export function drawGrid() {
-  if (maplibreMap) return; // MapLibre ya provee el fondo de mapa
-  const { width, height } = rendererSize();
-  const min = screenToWorld(0, 0);
-  const max = screenToWorld(width, height);
-  const GRID = 20;
-  const major = GRID * 5;
-
-  gridGraphics.clear();
-  for (let x = Math.floor(min.x / GRID) * GRID; x <= max.x; x += GRID) {
-    const majorLine = Math.abs(x % major) < 0.001;
-    gridGraphics.moveTo(x, min.y).lineTo(x, max.y);
-    gridGraphics.stroke({ width: GRID_LINE_WIDTH, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
-  }
-  for (let y = Math.floor(min.y / GRID) * GRID; y <= max.y; y += GRID) {
-    const majorLine = Math.abs(y % major) < 0.001;
-    gridGraphics.moveTo(min.x, y).lineTo(max.x, y);
-    gridGraphics.stroke({ width: GRID_LINE_WIDTH, color: majorLine ? COLORS.gridMajor : COLORS.gridMinor });
-  }
-}
 
 export function drawSelectedCarRoute() {
   routeGraphics.clear();

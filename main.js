@@ -11,7 +11,6 @@ import {
   setLiteMode,
   setMaplibreMap,
   setOsmParams,
-  initCoastline,
   fitViewToNetwork,
   updateStatus,
   updatePropertiesPanel,
@@ -51,7 +50,6 @@ async function init() {
     const res  = await fetch("./fixtures/menorca-sample.json");
     const data = await res.json();
     await importOSMData(data, msg => { statusEl.textContent = msg; });
-    await initCoastline();
     fitViewToNetwork();
   } catch (err) {
     statusEl.textContent = "Error cargando red: " + err.message;
