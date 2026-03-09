@@ -39,6 +39,14 @@ let camera = null;
 // connector paths, speed labels, grid) para redes grandes como la importación OSM.
 let liteMode = false;
 export function setLiteMode(v) { liteMode = v; roadsDirty = true; }
+
+// Referencia al mapa MapLibre (si está disponible).
+// Cuando está activo, las coordenadas mundo se convierten a pantalla vía map.project().
+let maplibreMap = null;
+export function setMaplibreMap(map) { maplibreMap = map; }
+
+// Escala actual: screen px por world px (1 world px = 1 m). Se actualiza en applyCameraTransform.
+let mapScale = 1;
 let gridGraphics = null;
 let coastlineGraphics = null;
 let junctionGraphics = null;
@@ -60,16 +68,17 @@ let carLabelsContainer = null;
 let speedLabelsContainer = null;
 
 export async function initRenderer() {
-  const worldEl = document.getElementById("world");
+  const stageEl  = document.getElementById("pixi-canvas");
+  const parentEl = stageEl.parentElement;
   await app.init({
-    resizeTo: worldEl,
+    canvas: stageEl,
+    resizeTo: parentEl,
     antialias: true,
-    background: COLORS.bg,
+    backgroundAlpha: 0,   // transparente — MapLibre dibuja debajo
     resolution: Math.min(window.devicePixelRatio || 1, 2),
     autoDensity: true,
   });
-  worldEl.appendChild(app.canvas);
-  canvas = app.canvas;
+  canvas = stageEl;
 
   camera = new PIXI.Container();
   gridGraphics       = new PIXI.Graphics();
@@ -117,6 +126,13 @@ function rendererSize() {
 }
 
 export function worldToScreen(x, y) {
+  if (maplibreMap) {
+    const { BBOX, SCALE } = _osmParams;
+    const lon = BBOX.minLon + x / SCALE;
+    const lat = BBOX.maxLat - y / SCALE;
+    const pt  = maplibreMap.project([lon, lat]);
+    return { x: pt.x, y: pt.y };
+  }
   const { width, height } = rendererSize();
   return {
     x: (x - state.view.x) * state.view.zoom + width / 2,
@@ -125,6 +141,14 @@ export function worldToScreen(x, y) {
 }
 
 export function screenToWorld(x, y) {
+  if (maplibreMap) {
+    const { BBOX, SCALE } = _osmParams;
+    const ll = maplibreMap.unproject([x, y]);
+    return {
+      x: (ll.lng - BBOX.minLon) * SCALE,
+      y: (BBOX.maxLat - ll.lat) * SCALE,
+    };
+  }
   const { width, height } = rendererSize();
   return {
     x: (x - width / 2) / state.view.zoom + state.view.x,
@@ -132,7 +156,23 @@ export function screenToWorld(x, y) {
   };
 }
 
+// Parámetros OSM importados dinámicamente para evitar dependencia circular.
+let _osmParams = { BBOX: null, SCALE: 1 };
+export function setOsmParams(bbox, scale) { _osmParams = { BBOX: bbox, SCALE: scale }; }
+
 export function applyCameraTransform() {
+  if (maplibreMap) {
+    // En modo MapLibre la cámara PixiJS queda en identidad.
+    // Calculamos mapScale para escalar los coches según el zoom actual.
+    const center = maplibreMap.getCenter();
+    const lat    = center.lat * Math.PI / 180;
+    const zoom   = maplibreMap.getZoom();
+    // screen px por metro (= screen px por world px, ya que 1 px = 1 m)
+    mapScale = Math.pow(2, zoom) / (156543 * Math.cos(lat));
+    camera.scale.set(1);
+    camera.position.set(0, 0);
+    return;
+  }
   const { width, height } = rendererSize();
   camera.scale.set(state.view.zoom, state.view.zoom);
   camera.position.set(
@@ -875,28 +915,30 @@ function makeDebugLabel(car) {
 export function drawCars() {
   carsGraphics.clear();
   clearDebugCarLabels();
+
+  // En modo MapLibre, tamaño mínimo 3px para que los coches sean siempre visibles.
+  const halfL   = maplibreMap ? Math.max(3, CAR_BODY_HALF_LENGTH * mapScale) : CAR_BODY_HALF_LENGTH;
+  const halfW   = maplibreMap ? Math.max(2, CAR_BODY_HALF_WIDTH  * mapScale) : CAR_BODY_HALF_WIDTH;
+  const cornerR = maplibreMap ? Math.max(0.5, CAR_CORNER_RADIUS  * mapScale) : CAR_CORNER_RADIUS;
+  const selR    = maplibreMap ? Math.max(4, CAR_SELECTION_RADIUS  * mapScale) : CAR_SELECTION_RADIUS;
+
   for (const car of state.cars) {
     const pose = getCarPose(car);
-    const p = pose.p;
-    const h = pose.h;
+    const wp   = pose.p;  // world coords
+    const h    = pose.h;
 
-    const selected = car.id === state.selectedCarId;
+    // Convertir a coords de pantalla si hay MapLibre
+    const p = maplibreMap ? worldToScreen(wp.x, wp.y) : wp;
+
+    const selected   = car.id === state.selectedCarId;
     const spawnAlpha = (car.spawnGrace || 0) > 0 ? 0.6 : 1;
 
-    // Selection glow ring (drawn first, behind the car body)
     if (selected) {
-      carsGraphics.circle(p.x, p.y, CAR_SELECTION_RADIUS);
+      carsGraphics.circle(p.x, p.y, selR);
       carsGraphics.stroke({ width: CAR_SELECTION_STROKE, color: SPEED_LABEL_BG_COLOR, alpha: CAR_SELECTION_ALPHA * spawnAlpha });
     }
 
-    const bodyPts = buildRoundedCarBodyPoints(
-      p.x,
-      p.y,
-      h,
-      CAR_BODY_HALF_LENGTH,
-      CAR_BODY_HALF_WIDTH,
-      CAR_CORNER_RADIUS
-    );
+    const bodyPts = buildRoundedCarBodyPoints(p.x, p.y, h, halfL, halfW, cornerR);
     carsGraphics.poly(bodyPts);
     carsGraphics.fill({ color: car.color, alpha: spawnAlpha });
     carsGraphics.stroke({
@@ -946,29 +988,34 @@ export function drawExplosions(dt) {
     const t = ex.age / ex.duration;          // 0 → 1
     const easeOut = 1 - (1 - t) * (1 - t);  // ease-out quad
 
+    // Proyectar posición a pantalla si hay MapLibre
+    const ep = maplibreMap ? worldToScreen(ex.x, ex.y) : { x: ex.x, y: ex.y };
+    const exScale = maplibreMap ? Math.max(1, mapScale) : 1;
+    const maxR   = EXPLOSION_MAX_RADIUS * exScale;
+
     // Expanding ring: orange → transparent
-    const ringRadius = EXPLOSION_MAX_RADIUS * easeOut;
+    const ringRadius = maxR * easeOut;
     const ringAlpha  = (1 - t) * 0.9;
     const ringWidth  = (1 - t) * 6 + 1;
     const ringColor  = t < 0.4 ? EXPLOSION_RING_COLOR_START : EXPLOSION_RING_COLOR_END;
-    explosionGraphics.circle(ex.x, ex.y, ringRadius);
+    explosionGraphics.circle(ep.x, ep.y, ringRadius);
     explosionGraphics.stroke({ color: ringColor, width: ringWidth, alpha: ringAlpha });
 
     // Inner flash (first 30% only)
     if (t < 0.3) {
       const flashAlpha = (1 - t / 0.3) * 0.6;
-      explosionGraphics.circle(ex.x, ex.y, ringRadius * 0.55);
+      explosionGraphics.circle(ep.x, ep.y, ringRadius * 0.55);
       explosionGraphics.fill({ color: SPEED_LABEL_BG_COLOR, alpha: flashAlpha });
     }
 
     // Sparks
-    const sparkLen  = EXPLOSION_MAX_RADIUS * 1.1 * easeOut;
+    const sparkLen   = maxR * 1.1 * easeOut;
     const sparkAlpha = (1 - t) * 0.85;
     for (const angle of ex.sparkAngles) {
-      const x1 = ex.x + Math.cos(angle) * ringRadius * 0.4;
-      const y1 = ex.y + Math.sin(angle) * ringRadius * 0.4;
-      const x2 = ex.x + Math.cos(angle) * sparkLen;
-      const y2 = ex.y + Math.sin(angle) * sparkLen;
+      const x1 = ep.x + Math.cos(angle) * ringRadius * 0.4;
+      const y1 = ep.y + Math.sin(angle) * ringRadius * 0.4;
+      const x2 = ep.x + Math.cos(angle) * sparkLen;
+      const y2 = ep.y + Math.sin(angle) * sparkLen;
       explosionGraphics.moveTo(x1, y1).lineTo(x2, y2);
       explosionGraphics.stroke({ color: EXPLOSION_SPARK_COLOR, width: EXPLOSION_SPARK_WIDTH, alpha: sparkAlpha });
     }
@@ -1292,6 +1339,17 @@ export function setTool(tool) {
 
 export function fitViewToNetwork() {
   if (state.nodes.size === 0) return false;
+
+  if (maplibreMap) {
+    const { BBOX } = _osmParams;
+    if (BBOX) {
+      maplibreMap.fitBounds(
+        [[BBOX.minLon, BBOX.minLat], [BBOX.maxLon, BBOX.maxLat]],
+        { padding: 40, duration: 800 }
+      );
+    }
+    return true;
+  }
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of state.nodes.values()) {

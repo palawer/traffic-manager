@@ -169,20 +169,18 @@ ul {
 .stage {
   flex: 1;
   position: relative;
-  background: var(--canvas-bg);
+  overflow: hidden;
 }
 
-#world {
-  width: 100%;
-  height: 100%;
-  display: block;
+#map {
+  position: absolute;
+  inset: 0;
 }
 
-#world canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-  cursor: default;
+#pixi-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 @media (max-width: 900px) {

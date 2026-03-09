@@ -7,21 +7,17 @@ import {
   initRenderer,
   setupUi,
   applyCameraTransform,
-  drawGrid,
-  drawRoads,
-  drawPreview,
   drawCars,
   drawExplosions,
-  drawSelectedCarRoute,
-  drawConnectorTool,
-  drawSignals,
-  drawSpeedLabels,
   setLiteMode,
+  setMaplibreMap,
+  setOsmParams,
   initCoastline,
   fitViewToNetwork,
   updateStatus,
   updatePropertiesPanel,
 } from "./renderer.js";
+import { BBOX, SCALE } from "./osm-import.js";
 import { setupInput } from "./editor.js";
 import { updateCars } from "./simulation.js";
 
@@ -31,13 +27,25 @@ init().catch(err => {
 });
 
 async function init() {
+  // Inicializar MapLibre
+  const map = new maplibregl.Map({
+    container: "map",
+    style: "https://tiles.openfreemap.org/styles/liberty",
+    center: [4.075, 39.965],
+    zoom: 10,
+  });
+  await new Promise(resolve => map.once("load", resolve));
+
+  // Pasar mapa al renderer y registrar parámetros de proyección OSM
+  setMaplibreMap(map);
+  setOsmParams(BBOX, SCALE);
+  setLiteMode(true);
+
   const { app } = await initRenderer();
   setupUi();
+
   if (loadState()) {
-    if (state.nodes.size > 500) {
-      setLiteMode(true);
-      initCoastline().catch(console.warn);
-    }
+    if (state.nodes.size > 500) initCoastline().catch(console.warn);
     rebuildJunctions();
     fitViewToNetwork();
   }
@@ -79,13 +87,6 @@ function frame(dt) {
   updateStatus();
   updatePropertiesPanel();
   applyCameraTransform();
-  drawGrid();
-  drawRoads();
-  drawPreview();
-  drawSelectedCarRoute();
-  drawConnectorTool();
-  drawSignals();
-  drawSpeedLabels();
   drawCars();
   drawExplosions(dt);
 }
