@@ -38,10 +38,12 @@ let camera = null;
 // En modo lite se omiten elementos decorativos pesados (nodos, crosswalks,
 // connector paths, speed labels, grid) para redes grandes como la importación OSM.
 let liteMode = false;
-export function setLiteMode(v) { liteMode = v; }
+export function setLiteMode(v) { liteMode = v; roadsDirty = true; }
 let gridGraphics = null;
 let coastlineGraphics = null;
 let junctionGraphics = null;
+let roadsDirty = true;  // fuerza redibujado la primera vez
+let lastCameraKey = ""; // detecta cambios de cámara para el grid
 let roadsGraphics = null;
 let laneMarkingsGraphics = null;
 let debugTrajectoriesGraphics = null;
@@ -169,6 +171,10 @@ function renderCoastline() {
 }
 
 export function drawGrid() {
+  const cameraKey = `${state.view.x.toFixed(1)},${state.view.y.toFixed(1)},${state.view.zoom.toFixed(4)}`;
+  if (cameraKey === lastCameraKey) return;
+  lastCameraKey = cameraKey;
+
   const min = screenToWorld(0, 0);
   const { width, height } = rendererSize();
   const max = screenToWorld(width, height);
@@ -290,7 +296,12 @@ function drawBendJunction(g, nodeId, segs) {
 }
 
 export function drawRoads() {
-  if (state.networkDirty) rebuildJunctions();
+  if (state.networkDirty) {
+    rebuildJunctions();
+    roadsDirty = true;
+  }
+  if (!roadsDirty) return;
+  roadsDirty = false;
 
   roadsGraphics.clear();
   laneMarkingsGraphics.clear();
