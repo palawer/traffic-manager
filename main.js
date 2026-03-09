@@ -1,6 +1,5 @@
 import { state } from "./state.js";
 import { MAX_DT } from "./config.js";
-import { loadState } from "./persistence.js";
 import { importOSMData } from "./osm-import.js";
 import {
   initRenderer,
@@ -48,23 +47,15 @@ async function init() {
   const statusEl = document.getElementById("importStatus");
   statusEl.style.display = "";
 
-  if (loadState() && state.nodes.size > 500) {
-    // Red ya en localStorage — usar directamente
-    statusEl.textContent = "Red cargada desde caché.";
-    initCoastline().catch(console.warn);
+  try {
+    const res  = await fetch("./fixtures/menorca-sample.json");
+    const data = await res.json();
+    await importOSMData(data, msg => { statusEl.textContent = msg; });
+    await initCoastline();
     fitViewToNetwork();
-  } else {
-    // Primera carga: importar desde el fixture local
-    try {
-      const res  = await fetch("./fixtures/menorca-sample.json");
-      const data = await res.json();
-      await importOSMData(data, msg => { statusEl.textContent = msg; });
-      await initCoastline();
-      fitViewToNetwork();
-    } catch (err) {
-      statusEl.textContent = "Error cargando red: " + err.message;
-      console.error(err);
-    }
+  } catch (err) {
+    statusEl.textContent = "Error cargando red: " + err.message;
+    console.error(err);
   }
 
   statusEl.style.display = "none";

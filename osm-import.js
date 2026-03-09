@@ -1,7 +1,6 @@
 // osm-import.js — Importa la red de carreteras de Menorca desde Overpass API
 
 import { addNode, addSegment } from "./network.js";
-import { saveState } from "./persistence.js";
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 
@@ -206,8 +205,6 @@ export function importOSMData(data, onProgress) {
 
   const nodesCreated = osmToSim.size;
   onProgress?.(`Creados ${nodesCreated} nodos y ${segmentsCreated} segmentos`);
-
-  saveState();
 
   onProgress?.("¡Importación completada!");
   return { nodes: nodesCreated, segments: segmentsCreated };

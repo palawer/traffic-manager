@@ -15,7 +15,6 @@ import { SPAWN_BATCH,
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
-import { saveState } from "./persistence.js";
 
 const app = new PIXI.Application();
 export let canvas = null;
@@ -1123,7 +1122,6 @@ export function setupUi() {
     state.nextConnectorId = 0;
     updateSpawnButtonLabel();
     markNetworkDirty();
-    saveState();
   });
 }
 
