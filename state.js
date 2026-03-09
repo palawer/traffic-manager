@@ -1,9 +1,3 @@
-import { COLOR_CAR_STROKE } from "./config.js";
-
-export const COLORS = {
-  carStroke: COLOR_CAR_STROKE,
-};
-
 export const state = {
   view: { x: 0, y: 0, zoom: 1 },
   nodes: new Map(),          // id → { id, x, y }

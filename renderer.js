@@ -1,9 +1,8 @@
-import { state, COLORS } from "./state.js";
+import { state } from "./state.js";
 import { SPAWN_BATCH,
   DEBUG_PATH_ALPHA, DEBUG_PATH_SEGMENT_WIDTH,
   CAR_BODY_HALF_LENGTH, CAR_BODY_HALF_WIDTH, CAR_CORNER_RADIUS,
   CAR_SELECTION_RADIUS, CAR_SELECTION_STROKE, CAR_SELECTION_ALPHA,
-  CAR_STROKE_WIDTH, CAR_STROKE_SELECTED_WIDTH,
   SPEED_LABEL_BG_COLOR,
   ROUTE_GLOW_WIDTH, ROUTE_LINE_WIDTH, ROUTE_GLOW_ALPHA, ROUTE_LINE_ALPHA,
   ROUTE_PIN_RADIUS, ROUTE_PIN_SHADOW_ALPHA, ROUTE_PIN_FILL_ALPHA,
@@ -29,9 +28,13 @@ let mapScale = 1;
 let roadsGraphics = null;
 let routeGraphics = null;
 let routePinGraphics = null;
-let carsGraphics = null;
-let carLabelsContainer = null;
+let particleContainer = null;
+let selectionGraphics = null;
 let routeLabelContainer = null;
+
+let carTexture = null;
+const _carParticles = new Map(); // car.id → PIXI.Particle
+const _particlePool = [];
 
 export async function initRenderer() {
   const stageEl  = document.getElementById("pixi-canvas");
@@ -47,20 +50,29 @@ export async function initRenderer() {
   canvas = stageEl;
 
   camera = new PIXI.Container();
-  roadsGraphics      = new PIXI.Graphics();
-  routeGraphics      = new PIXI.Graphics();
-  routePinGraphics   = new PIXI.Graphics();
-  carsGraphics       = new PIXI.Graphics();
-  carLabelsContainer = new PIXI.Container();
+  roadsGraphics       = new PIXI.Graphics();
+  routeGraphics       = new PIXI.Graphics();
+  routePinGraphics    = new PIXI.Graphics();
+  selectionGraphics   = new PIXI.Graphics();
   routeLabelContainer = new PIXI.Container();
+
+  // ParticleContainer for cars — single GPU batch for all car sprites
+  particleContainer = new PIXI.ParticleContainer({ dynamicProperties: { position: true, rotation: true, color: true, scale: true } });
 
   camera.addChild(roadsGraphics);
   camera.addChild(routeGraphics);
-  camera.addChild(carsGraphics);
-  camera.addChild(carLabelsContainer);
+  camera.addChild(particleContainer);
+  camera.addChild(selectionGraphics);
   camera.addChild(routePinGraphics);
   app.stage.addChild(camera);
   app.stage.addChild(routeLabelContainer);
+
+  // Build car texture: white rounded rect, tinted per car at draw time
+  const tg = new PIXI.Graphics();
+  tg.roundRect(0, 0, CAR_BODY_HALF_LENGTH * 2, CAR_BODY_HALF_WIDTH * 2, CAR_CORNER_RADIUS);
+  tg.fill(0xffffff);
+  carTexture = app.renderer.generateTexture(tg);
+  tg.destroy();
 
   return { app };
 }
@@ -273,25 +285,28 @@ function getCarPose(car) {
   };
 }
 
-function clearDebugCarLabels() {
-  for (const ch of carLabelsContainer.removeChildren()) ch.destroy();
-}
-
 export function drawCars() {
-  carsGraphics.clear();
-  clearDebugCarLabels();
+  selectionGraphics.clear();
 
-  const halfL   = maplibreMap ? Math.max(3, CAR_BODY_HALF_LENGTH * mapScale) : CAR_BODY_HALF_LENGTH;
-  const halfW   = maplibreMap ? Math.max(2, CAR_BODY_HALF_WIDTH  * mapScale) : CAR_BODY_HALF_WIDTH;
-  const cornerR = maplibreMap ? Math.max(0.5, CAR_CORNER_RADIUS  * mapScale) : CAR_CORNER_RADIUS;
-  const selR    = maplibreMap ? Math.max(4, CAR_SELECTION_RADIUS  * mapScale) : CAR_SELECTION_RADIUS;
+  const scaleX = maplibreMap ? Math.max(3, CAR_BODY_HALF_LENGTH * mapScale) / CAR_BODY_HALF_LENGTH : 1;
+  const scaleY = maplibreMap ? Math.max(2, CAR_BODY_HALF_WIDTH  * mapScale) / CAR_BODY_HALF_WIDTH  : 1;
+  const selR   = maplibreMap ? Math.max(4, CAR_SELECTION_RADIUS * mapScale) : CAR_SELECTION_RADIUS;
+
+  // Remove particles for cars that no longer exist
+  const currentIds = new Set(state.cars.map(c => c.id));
+  for (const [id, particle] of _carParticles) {
+    if (!currentIds.has(id)) {
+      particleContainer.removeParticle(particle);
+      _particlePool.push(particle);
+      _carParticles.delete(id);
+    }
+  }
 
   for (const car of state.cars) {
     const pose = getCarPose(car);
-    const wp   = pose.p;
+    const p = maplibreMap ? worldToScreen(pose.p.x, pose.p.y) : pose.p;
 
-    const p = maplibreMap ? worldToScreen(wp.x, wp.y) : wp;
-
+    // Screen-space heading
     let h = pose.h;
     if (maplibreMap && pose.path) {
       const aheadS = Math.min(pose.s + 2, pose.path.length - 0.001);
@@ -300,61 +315,32 @@ export function drawCars() {
       const dx = aheadP.x - p.x, dy = aheadP.y - p.y;
       if (dx * dx + dy * dy > 0.1) h = Math.atan2(dy, dx);
     }
-
-    // Smooth heading with exponential filter
     if (car._renderH === undefined) car._renderH = h;
     let diff = h - car._renderH;
     while (diff >  Math.PI) diff -= 2 * Math.PI;
     while (diff < -Math.PI) diff += 2 * Math.PI;
     car._renderH += diff * 0.25;
-    h = car._renderH;
 
-    const selected   = car.id === state.selectedCarId;
-    const spawnAlpha = 1;
-
-    if (selected) {
-      carsGraphics.circle(p.x, p.y, selR);
-      carsGraphics.stroke({ width: CAR_SELECTION_STROKE, color: SPEED_LABEL_BG_COLOR, alpha: CAR_SELECTION_ALPHA * spawnAlpha });
+    // Acquire or reuse particle
+    let particle = _carParticles.get(car.id);
+    if (!particle) {
+      particle = _particlePool.pop() ?? new PIXI.Particle({ texture: carTexture, anchorX: 0.5, anchorY: 0.5 });
+      particleContainer.addParticle(particle);
+      _carParticles.set(car.id, particle);
     }
 
-    const bodyPts = buildRoundedCarBodyPoints(p.x, p.y, h, halfL, halfW, cornerR);
-    carsGraphics.poly(bodyPts);
-    carsGraphics.fill({ color: car.color, alpha: spawnAlpha });
-    carsGraphics.stroke({
-      width: selected ? CAR_STROKE_SELECTED_WIDTH : CAR_STROKE_WIDTH,
-      color: selected ? SPEED_LABEL_BG_COLOR : COLORS.carStroke,
-      alpha: spawnAlpha,
-    });
-  }
-}
+    particle.x        = p.x;
+    particle.y        = p.y;
+    particle.rotation = car._renderH;
+    particle.scaleX   = scaleX;
+    particle.scaleY   = scaleY;
+    particle.color    = car.color;
 
-function buildRoundedCarBodyPoints(cx, cy, heading, halfL, halfW, radius) {
-  const r = Math.max(0, Math.min(radius, halfL, halfW));
-  const innerL = halfL - r;
-  const innerW = halfW - r;
-  const cornerSteps = 3;
-  const local = [];
-
-  function addArc(centerX, centerY, a0, a1) {
-    for (let i = 0; i <= cornerSteps; i++) {
-      const t = i / cornerSteps;
-      const a = a0 + (a1 - a0) * t;
-      local.push({ x: centerX + Math.cos(a) * r, y: centerY + Math.sin(a) * r });
+    if (car.id === state.selectedCarId) {
+      selectionGraphics.circle(p.x, p.y, selR);
+      selectionGraphics.stroke({ width: CAR_SELECTION_STROKE, color: SPEED_LABEL_BG_COLOR, alpha: CAR_SELECTION_ALPHA });
     }
   }
-
-  addArc(innerL, -innerW, -Math.PI / 2, 0);
-  addArc(innerL, innerW, 0, Math.PI / 2);
-  addArc(-innerL, innerW, Math.PI / 2, Math.PI);
-  addArc(-innerL, -innerW, Math.PI, (3 * Math.PI) / 2);
-
-  const c = Math.cos(heading);
-  const s = Math.sin(heading);
-  const world = [];
-  for (const q of local) {
-    world.push(cx + q.x * c - q.y * s, cy + q.x * s + q.y * c);
-  }
-  return world;
 }
 
 export function updatePropertiesPanel() {}

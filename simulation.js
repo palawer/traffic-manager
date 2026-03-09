@@ -93,10 +93,27 @@ export function spawnCar() {
   return true;
 }
 
+/** Build a per-lane index: key → cars sorted by s, with _laneNext pointer set. O(n log n). */
+function buildLaneIndex(cars) {
+  const index = new Map();
+  for (const car of cars) {
+    const key = `${car.segId}|${car.dir}|${car.laneIdx}`;
+    let lane = index.get(key);
+    if (!lane) { lane = []; index.set(key, lane); }
+    lane.push(car);
+  }
+  for (const lane of index.values()) {
+    lane.sort((a, b) => a.s - b.s);
+    for (let i = 0; i < lane.length; i++) lane[i]._laneNext = lane[i + 1] ?? null;
+  }
+  return index;
+}
+
 export function updateCars(dt) {
+  const laneIndex = buildLaneIndex(state.cars);
   for (const car of state.cars) {
     car.spawnGrace = Math.max(0, (car.spawnGrace || 0) - dt);
-    updateCarOnSegment(car, dt);
+    updateCarOnSegment(car, dt, laneIndex);
   }
 
   state.cars = state.cars.filter(c => !c.remove);
@@ -139,7 +156,7 @@ function hasAnySpawnRoute() {
   return false;
 }
 
-function updateCarOnSegment(car, dt) {
+function updateCarOnSegment(car, dt, laneIndex) {
   // Retry reroute for cars stuck with no viable route
   if (car.reroutePendingTime > 0) {
     car.reroutePendingTime = Math.max(0, car.reroutePendingTime - dt);
@@ -166,15 +183,9 @@ function updateCarOnSegment(car, dt) {
   car.debugBrakeReason = "none";
   car.debugRemToEnd = remToEnd;
 
-  // Car-following: detect cars ahead on same segment/lane
-  let obstacleDist = Infinity;
-  for (const other of state.cars) {
-    if (other === car) continue;
-    if (other.segId !== car.segId || other.dir !== car.dir || other.laneIdx !== car.laneIdx) continue;
-    if (other.s <= car.s) continue; // only cars ahead
-    const dist = other.s - car.s;
-    if (dist < obstacleDist) obstacleDist = dist;
-  }
+  // Car-following: O(1) lookup via pre-built lane index
+  const ahead = car._laneNext;
+  let obstacleDist = ahead ? ahead.s - car.s : Infinity;
 
   const seg = state.segments.get(car.segId);
   let target = seg ? seg.speedLimit * car.speedFactor : car.desiredSpeed;
@@ -204,14 +215,9 @@ function updateCarOnSegment(car, dt) {
 
   applyAcceleration(car, target, dt);
 
-  // Hard-clamp: never get within CAR_STOP_DIST of any car ahead in the same lane
+  // Hard-clamp: never get within CAR_STOP_DIST of the car ahead
   let advance = car.speed * dt;
-  for (const other of state.cars) {
-    if (other === car) continue;
-    if (other.segId !== car.segId || other.dir !== car.dir || other.laneIdx !== car.laneIdx) continue;
-    if (other.s <= car.s) continue;
-    advance = Math.min(advance, Math.max(0, other.s - car.s - CAR_STOP_DIST));
-  }
+  if (ahead) advance = Math.min(advance, Math.max(0, ahead.s - car.s - CAR_STOP_DIST));
   car.s += advance;
 
   if (car.s >= car.path.length) {

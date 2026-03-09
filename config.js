@@ -25,7 +25,6 @@ export const REROUTE_RETRY_INTERVAL = 3.0;
 export const REROUTE_MAX_RETRIES    = 4;
 
 // ── Colors ────────────────────────────────────────────────────────────────────
-export const COLOR_CAR_STROKE = 0x172028;
 export const NODE_STROKE_COLOR = 0x000000;
 
 // ── Cars ──────────────────────────────────────────────────────────────────────
@@ -35,8 +34,6 @@ export const CAR_CORNER_RADIUS         = 1.8;
 export const CAR_SELECTION_RADIUS      = 10;
 export const CAR_SELECTION_STROKE      = 2.5;
 export const CAR_SELECTION_ALPHA       = 0.95;
-export const CAR_STROKE_WIDTH          = 1.5;
-export const CAR_STROKE_SELECTED_WIDTH = 2;
 
 // ── Route display ─────────────────────────────────────────────────────────────
 export const ROUTE_GLOW_WIDTH       = 8;
