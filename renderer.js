@@ -1088,7 +1088,9 @@ export function setupUi() {
   });
 
   spawnCarBtn.addEventListener("click", () => {
-    state.pendingSpawns += SPAWN_BATCH;
+    const input = document.getElementById("spawnBatchInput");
+    const batch = Math.max(1, parseInt(input?.value) || SPAWN_BATCH);
+    state.pendingSpawns += batch;
     updateSpawnButtonLabel();
   });
 
