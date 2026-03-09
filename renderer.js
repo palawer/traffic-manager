@@ -961,10 +961,19 @@ export function drawCars() {
   for (const car of state.cars) {
     const pose = getCarPose(car);
     const wp   = pose.p;  // world coords
-    const h    = pose.h;
 
     // Convertir a coords de pantalla si hay MapLibre
     const p = maplibreMap ? worldToScreen(wp.x, wp.y) : wp;
+
+    // Heading en screen-space: proyectar un punto adelantado para corregir distorsión Mercator
+    let h = pose.h;
+    if (maplibreMap && pose.path) {
+      const aheadS = Math.min(pose.s + 2, pose.path.length - 0.001);
+      const aheadW = pointAtPath(pose.path, aheadS);
+      const aheadP = worldToScreen(aheadW.x, aheadW.y);
+      const dx = aheadP.x - p.x, dy = aheadP.y - p.y;
+      if (dx * dx + dy * dy > 0.1) h = Math.atan2(dy, dx);
+    }
 
     const selected   = car.id === state.selectedCarId;
     const spawnAlpha = (car.spawnGrace || 0) > 0 ? 0.6 : 1;
