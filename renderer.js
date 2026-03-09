@@ -296,8 +296,8 @@ function getCarPose(car) {
 export function drawCars() {
   selectionGraphics.clear();
 
-  const scaleX = maplibreMap ? Math.max(3, CAR_BODY_HALF_LENGTH * mapScale) / CAR_BODY_HALF_LENGTH : 1;
-  const scaleY = maplibreMap ? Math.max(2, CAR_BODY_HALF_WIDTH  * mapScale) / CAR_BODY_HALF_WIDTH  : 1;
+  const scaleX = maplibreMap ? Math.max(1.5, CAR_BODY_HALF_LENGTH * mapScale) / CAR_BODY_HALF_LENGTH : 1;
+  const scaleY = maplibreMap ? Math.max(1.0, CAR_BODY_HALF_WIDTH  * mapScale) / CAR_BODY_HALF_WIDTH  : 1;
   const selR   = maplibreMap ? Math.max(4, CAR_SELECTION_RADIUS * mapScale) : CAR_SELECTION_RADIUS;
 
   // Remove particles for cars that no longer exist

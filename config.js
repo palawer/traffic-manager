@@ -28,9 +28,9 @@ export const REROUTE_MAX_RETRIES    = 4;
 export const NODE_STROKE_COLOR = 0x000000;
 
 // ── Cars ──────────────────────────────────────────────────────────────────────
-export const CAR_BODY_HALF_LENGTH      = 6;
-export const CAR_BODY_HALF_WIDTH       = 3.5;
-export const CAR_CORNER_RADIUS         = 1.8;
+export const CAR_BODY_HALF_LENGTH      = 2.25; // 4.5m total
+export const CAR_BODY_HALF_WIDTH       = 1.0;  // 2m total
+export const CAR_CORNER_RADIUS         = 0.4;
 export const CAR_SELECTION_RADIUS      = 10;
 export const CAR_SELECTION_STROKE      = 2.5;
 export const CAR_SELECTION_ALPHA       = 0.95;
