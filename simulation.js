@@ -10,7 +10,7 @@ import {
   REROUTE_RETRY_INTERVAL, REROUTE_MAX_RETRIES,
 } from "./config.js";
 import { pointAtPath, headingAtPath, hslToHex } from "./geometry.js";
-import { rebuildJunctions, getNodeSegments, findConnector, getDestinationNode } from "./network.js";
+import { getNodeSegments, getDestinationNode } from "./network.js";
 import { findRoute, routeToLaneSequence } from "./router.js";
 import { buildLanePath } from "./traversal.js";
 
@@ -70,7 +70,6 @@ export function updateSignals(dt) {
  * Spawn a car at a random segment endpoint with an A* route to another random node.
  */
 export function spawnCar() {
-  if (state.networkDirty) rebuildJunctions();
 
   const nodeIds = [...state.nodes.keys()];
   if (nodeIds.length < 2) return false;
@@ -171,7 +170,6 @@ export function spawnCar() {
 }
 
 export function updateCars(dt) {
-  if (state.networkDirty) rebuildJunctions();
   updateSignals(dt);
 
   for (const car of state.cars) {
@@ -290,51 +288,6 @@ function updateCarOnSegment(car, dt) {
   }
   car.debugNextStep = nextStep ? `${nextStep.segId}:${nextStep.dir}:${nextStep.laneIdx}` : "reroute";
 
-  // Look ahead to junction
-  if (remToEnd < JUNCTION_LOOKAHEAD && seg) {
-    const destNodeId = getDestinationNode(seg, car.dir);
-    const junc = state.junctions.get(destNodeId);
-
-    if (junc && junc.connectors.length > 0) {
-      let conn = nextStep
-        ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
-        : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
-      if (!conn && nextStep) {
-        // Relax only lane matching, keep the same target segment+direction.
-        conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
-      }
-      if (!conn && nextStep) {
-        // Planned transition no longer exists from this incoming lane.
-        // Re-route now (before reaching stop line), then retry connector lookup.
-        if (rerouteFrom(car, destNodeId)) {
-          nextStep = car.laneSeq[car.routeStep + 1];
-          if (nextStep) {
-            conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
-              || findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
-          }
-        }
-      }
-      if (conn) {
-        car.debugExpectedConnectorId = conn.id;
-        car.debugConnExists = true;
-        const sig = getConnectorSignalDebug(conn);
-        car.debugSignalGreen = sig.green;
-        car.debugSignalPhase = sig.managed ? `${sig.phaseIndex + 1}/${sig.phaseCount}` : "unmanaged";
-        car.debugSignalTimer = sig.phaseTimer;
-        if (!sig.green || isJunctionBlocked(conn)) {
-          target = 0;
-          stopBeforeLineS = stopLineHoldS;
-          car.debugBrakeReason = !sig.green ? "red_light" : "blocked_connector";
-        }
-      } else {
-        target = 0;
-        stopBeforeLineS = stopLineHoldS;
-        car.debugBrakeReason = "no_connector";
-        car.debugInvalidConnector = true;
-      }
-    }
-  }
-
   if (obstacleDist < CAR_STOP_DIST) {
     target = 0;
     car.debugBrakeReason = "car_ahead";
@@ -365,100 +318,18 @@ function updateCarOnSegment(car, dt) {
   }
 
   if (car.s >= car.path.length) {
-    car.s = car.path.length;
-    if (!seg) { car.remove = true; return; }
-
-    const destNodeId = getDestinationNode(seg, car.dir);
-
-    // Last step: always pick a new random destination using the current network.
     if (!nextStep) {
+      if (!seg) { car.remove = true; return; }
+      const destNodeId = getDestinationNode(seg, car.dir);
       if (!rerouteFrom(car, destNodeId)) {
-        // No viable route right now: arm timer to retry after a delay.
-        car.s = stopLineHoldS;
-        car.speed = 0;
-        car.reroutePendingTime = REROUTE_RETRY_INTERVAL;
-        car.debugBrakeReason = "reroute_pending";
-        return;
-      }
-      nextStep = car.laneSeq && car.laneSeq[car.routeStep + 1]; // laneSeq[0] since routeStep = -1
-      if (!nextStep) {
-        car.s = stopLineHoldS;
+        car.s = Math.max(0, car.path.length - 1);
         car.speed = 0;
         car.reroutePendingTime = REROUTE_RETRY_INTERVAL;
         car.debugBrakeReason = "reroute_pending";
         return;
       }
     }
-
-    let conn = nextStep
-      ? findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
-      : findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
-    if (!conn && nextStep) {
-      // Relax only lane matching, keep the same target segment+direction.
-      conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
-    }
-
-    // Robust fallback: if planned connector does not exist, use any real connector
-    // from this incoming lane so cars do not disappear at the junction.
-    if (!conn && !nextStep) {
-      conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx);
-    }
-
-    if (conn && isConnectorGreen(conn) && !isJunctionBlocked(conn)) {
-      car.phase = "junction";
-      car.connectorId = conn.id;
-      car.debugCurrentConnectorId = conn.id;
-      car.junctionNodeId = conn.nodeId;
-      car.junctionPath = conn.path;
-      car.junctionS = 0;
-      car.pendingOutSegId = conn.outSegId;
-      car.pendingOutDir = conn.outDir;
-      car.pendingOutLane = conn.outLane;
-      car.joinGrace = JOIN_GRACE_TIME;
-    } else if (conn) {
-      // Wait just before the stop line (car nose at line, not on top of it)
-      car.s = stopLineHoldS;
-      car.speed = 0;
-      car.joinGrace = JOIN_GRACE_TIME;
-    } else {
-      // Planned transition is no longer viable (topology/user connectors changed).
-      // Recompute from this node; if still impossible, wait and retry.
-      if (!rerouteFrom(car, destNodeId)) {
-        car.s = stopLineHoldS;
-        car.speed = 0;
-        car.reroutePendingTime = REROUTE_RETRY_INTERVAL;
-        car.debugBrakeReason = "reroute_pending";
-        car.debugInvalidConnector = true;
-        return;
-      }
-      nextStep = car.laneSeq[car.routeStep + 1];
-      if (!nextStep) {
-        car.s = stopLineHoldS;
-        car.speed = 0;
-        car.debugBrakeReason = "reroute_pending";
-        car.debugInvalidConnector = true;
-        return;
-      }
-      conn = findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir, nextStep.laneIdx)
-        || findConnector(destNodeId, car.segId, car.dir, car.laneIdx, nextStep.segId, nextStep.dir);
-      if (conn && isConnectorGreen(conn) && !isJunctionBlocked(conn)) {
-        car.phase = "junction";
-        car.connectorId = conn.id;
-        car.debugCurrentConnectorId = conn.id;
-        car.junctionNodeId = conn.nodeId;
-        car.junctionPath = conn.path;
-        car.junctionS = 0;
-        car.pendingOutSegId = conn.outSegId;
-        car.pendingOutDir = conn.outDir;
-        car.pendingOutLane = conn.outLane;
-        car.joinGrace = JOIN_GRACE_TIME;
-      } else {
-        car.s = stopLineHoldS;
-        car.speed = 0;
-        car.debugBrakeReason = "connector_unavailable";
-        car.debugInvalidConnector = true;
-      }
-    }
+    advanceRouteStep(car);
   }
   car.waiting = car.speed < 0.2 && car.debugTargetSpeed <= 0.01;
   car.debugWaitTime = car.waiting ? (car.debugWaitTime || 0) + dt : 0;
@@ -626,32 +497,12 @@ function rerouteFrom(car, fromNodeId) {
     if (!route || route.length < 2) continue;
     const laneSeq = routeToLaneSequence(route);
     if (laneSeq.length === 0) continue;
-    // Verify a connector exists from the car's current lane to the first step
-    // (rules out U-turns and other missing connectors)
+    // Prevent immediate U-turn at multi-way intersections
     const firstStep = laneSeq[0];
-    // Never allow immediate turn-back at regular intersections.
-    // Allow it only at dead-ends (single connected segment).
     if (firstStep.segId === car.segId && getNodeSegments(fromNodeId).length > 1) continue;
-    const conn = findConnector(
-      fromNodeId,
-      car.segId,
-      car.dir,
-      car.laneIdx,
-      firstStep.segId,
-      firstStep.dir,
-      firstStep.laneIdx
-    ) || findConnector(
-      fromNodeId,
-      car.segId,
-      car.dir,
-      car.laneIdx,
-      firstStep.segId,
-      firstStep.dir
-    );
-    if (!conn) continue;
     car.route = route;
     car.laneSeq = laneSeq;
-    car.routeStep = -1; // advances to 0 when entering the first junction
+    car.routeStep = -1;
     car.debugReroutes = (car.debugReroutes || 0) + 1;
     return true;
   }

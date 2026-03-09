@@ -67,8 +67,17 @@ function getArrivalEndpointLocal(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
 
 /**
  * Build the lane path for a car on a segment.
- * Returns polylineMetrics.
+ * Usa la geometría OSM real si está disponible; si no, línea recta nodo a nodo.
  */
 export function buildLanePath(seg, nodes, dir, laneIdx) {
-  return buildSegmentLanePath(seg, nodes, dir, laneIdx);
+  if (seg.geometry && seg.geometry.length >= 2) {
+    const pts = dir === "AtoB" ? seg.geometry : [...seg.geometry].reverse();
+    return polylineMetrics(pts);
+  }
+  const sourceNodeId = (dir === "AtoB") ? seg.nodeA : seg.nodeB;
+  const destNodeId   = (dir === "AtoB") ? seg.nodeB : seg.nodeA;
+  const source = nodes.get(sourceNodeId);
+  const dest   = nodes.get(destNodeId);
+  if (!source || !dest) return polylineMetrics([]);
+  return polylineMetrics([{ x: source.x, y: source.y }, { x: dest.x, y: dest.y }]);
 }

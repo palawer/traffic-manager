@@ -1,6 +1,6 @@
 // osm-import.js — Importa la red de carreteras de Menorca desde Overpass API
 
-import { addNode, addSegment, rebuildJunctions } from "./network.js";
+import { addNode, addSegment } from "./network.js";
 import { saveState } from "./persistence.js";
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
@@ -176,8 +176,9 @@ export function importOSMData(data, onProgress) {
       lanesBtoA = def;
     }
 
-    // Recorrer los nodos de la vía; los intermedios no clave se saltan
+    // Recorrer los nodos de la vía; los intermedios se guardan como geometría
     let prevSimId = null;
+    let prevKeyIdx = -1;
 
     for (let i = 0; i < way.nodes.length; i++) {
       const osmId = way.nodes[i];
@@ -187,19 +188,24 @@ export function importOSMData(data, onProgress) {
       if (simId === null) continue;
 
       if (prevSimId !== null && prevSimId !== simId) {
-        addSegment(prevSimId, simId, lanesAtoB, lanesBtoA, speedLimit);
+        // Recolectar todos los puntos entre el nodo clave anterior y éste
+        const geometry = [];
+        for (let j = prevKeyIdx; j <= i; j++) {
+          const n = osmNodes.get(way.nodes[j]);
+          if (n) geometry.push(project(n.lat, n.lon));
+        }
+        addSegment(prevSimId, simId, lanesAtoB, lanesBtoA, speedLimit, geometry);
         segmentsCreated++;
       }
 
       prevSimId = simId;
+      prevKeyIdx = i;
     }
   }
 
   const nodesCreated = osmToSim.size;
   onProgress?.(`Creados ${nodesCreated} nodos y ${segmentsCreated} segmentos`);
 
-  onProgress?.("Construyendo intersecciones…");
-  rebuildJunctions();
   saveState();
 
   onProgress?.("¡Importación completada!");

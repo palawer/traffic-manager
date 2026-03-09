@@ -7,9 +7,13 @@ import { SPAWN_BATCH,
   SPEED_LABEL_BG_COLOR,
   EXPLOSION_MAX_RADIUS, EXPLOSION_RING_COLOR_START, EXPLOSION_RING_COLOR_END,
   EXPLOSION_SPARK_COLOR, EXPLOSION_SPARK_WIDTH,
-  GRID_LINE_WIDTH, ZOOM_MIN, ZOOM_MAX } from "./config.js";
+  GRID_LINE_WIDTH, ZOOM_MIN, ZOOM_MAX,
+  ROUTE_GLOW_WIDTH, ROUTE_LINE_WIDTH, ROUTE_GLOW_ALPHA, ROUTE_LINE_ALPHA,
+  ROUTE_PIN_RADIUS, ROUTE_PIN_SHADOW_ALPHA, ROUTE_PIN_FILL_ALPHA,
+  ROUTE_PIN_BORDER_WIDTH, ROUTE_PIN_BORDER_ALPHA, ROUTE_PIN_DOT_ALPHA,
+  NODE_STROKE_WIDTH, NODE_STROKE_COLOR, NODE_STROKE_ALPHA } from "./config.js";
 import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
-import { rebuildJunctions, markNetworkDirty, getNodeSegments } from "./network.js";
+import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
 import { saveState } from "./persistence.js";
 
@@ -193,7 +197,7 @@ function renderCoastline() {
   }
 }
 
-/** Dibuja los segmentos del simulador en screen-space (modo debug sobre MapLibre). */
+/** Dibuja los paths reales de carril + conectores de junction en screen-space (modo debug). */
 export function drawDebugRoads() {
   if (!maplibreMap) return;
 
@@ -207,17 +211,24 @@ export function drawDebugRoads() {
   roadsGraphics.clear();
   if (!state.debugLanes) return;
 
+  function drawPath(points) {
+    if (!points || points.length < 2) return;
+    const s0 = worldToScreen(points[0].x, points[0].y);
+    roadsGraphics.moveTo(s0.x, s0.y);
+    for (let i = 1; i < points.length; i++) {
+      const s = worldToScreen(points[i].x, points[i].y);
+      roadsGraphics.lineTo(s.x, s.y);
+    }
+  }
+
+  // Un path por segmento (geometría OSM real)
   for (const seg of state.segments.values()) {
-    const nA = state.nodes.get(seg.nodeA);
-    const nB = state.nodes.get(seg.nodeB);
-    if (!nA || !nB) continue;
-
-    const sA = worldToScreen(nA.x, nA.y);
-    const sB = worldToScreen(nB.x, nB.y);
-
-    roadsGraphics.moveTo(sA.x, sA.y).lineTo(sB.x, sB.y);
+    const path = buildLanePath(seg, state.nodes, "AtoB", 0);
+    if (!path || path.points.length < 2) continue;
+    drawPath(path.points);
     roadsGraphics.stroke({ width: DEBUG_PATH_SEGMENT_WIDTH, color: COLORS.debugLane, alpha: DEBUG_PATH_ALPHA, pixelLine: true });
   }
+
 }
 
 export function drawGrid() {
@@ -704,16 +715,21 @@ export function drawSelectedCarRoute() {
     // Find first point index strictly after fromS
     let idx = 0;
     while (idx < path.cumulative.length - 1 && path.cumulative[idx] <= fromS) idx++;
-    const pts = [currPos, ...path.points.slice(idx)];
-    if (pts.length < 2) return;
+    const worldPts = [currPos, ...path.points.slice(idx)];
+    if (worldPts.length < 2) return;
+    const pts = maplibreMap
+      ? worldPts.map(p => worldToScreen(p.x, p.y))
+      : worldPts;
+    const w = maplibreMap ? Math.max(2, glow * mapScale) : glow;
+    const wt = maplibreMap ? Math.max(1, thin * mapScale) : thin;
     // Glow pass
     routeGraphics.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) routeGraphics.lineTo(pts[i].x, pts[i].y);
-    routeGraphics.stroke({ width: glow, color, alpha: ROUTE_GLOW_ALPHA });
+    routeGraphics.stroke({ width: w, color, alpha: ROUTE_GLOW_ALPHA });
     // Line pass
     routeGraphics.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) routeGraphics.lineTo(pts[i].x, pts[i].y);
-    routeGraphics.stroke({ width: thin, color, alpha: ROUTE_LINE_ALPHA });
+    routeGraphics.stroke({ width: wt, color, alpha: ROUTE_LINE_ALPHA });
   }
 
   // 1. Remaining current phase path
@@ -760,18 +776,19 @@ export function drawSelectedCarRoute() {
   if (car.route && car.route.length > 0) {
     const destNode = state.nodes.get(car.route[car.route.length - 1]);
     if (destNode) {
-      const pinR  = ROUTE_PIN_RADIUS;
+      const dp = maplibreMap ? worldToScreen(destNode.x, destNode.y) : destNode;
+      const pinR = maplibreMap ? Math.max(8, ROUTE_PIN_RADIUS * mapScale) : ROUTE_PIN_RADIUS;
       // Shadow
-      routePinGraphics.circle(destNode.x, destNode.y, pinR * 1.1);
+      routePinGraphics.circle(dp.x, dp.y, pinR * 1.1);
       routePinGraphics.fill({ color: NODE_STROKE_COLOR, alpha: ROUTE_PIN_SHADOW_ALPHA });
 
       // Main circle
-      routePinGraphics.circle(destNode.x, destNode.y, pinR);
+      routePinGraphics.circle(dp.x, dp.y, pinR);
       routePinGraphics.fill({ color, alpha: ROUTE_PIN_FILL_ALPHA });
       routePinGraphics.stroke({ width: ROUTE_PIN_BORDER_WIDTH, color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_BORDER_ALPHA });
 
       // Inner dot
-      routePinGraphics.circle(destNode.x, destNode.y, pinR * 0.35);
+      routePinGraphics.circle(dp.x, dp.y, pinR * 0.35);
       routePinGraphics.fill({ color: SPEED_LABEL_BG_COLOR, alpha: ROUTE_PIN_DOT_ALPHA });
     }
   }

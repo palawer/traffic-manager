@@ -76,7 +76,7 @@ export const SIGNAL_PHASE_DURATION = 5; // seconds each phase stays green before
 // ── Car spawning ──────────────────────────────────────────────────────────────
 export const SPAWN_CLEARANCE    = 35; // spawn point must be clear within this radius (px)
 export const SPAWN_MAX_ATTEMPTS = 6;  // max spawn attempts per frame before giving up
-export const SPAWN_BATCH        = 1000; // number of cars queued per button click
+export const SPAWN_BATCH        = 10;   // number of cars queued per button click
 export const SPAWN_GRACE_TIME   = 2;  // seconds of collision immunity for newly spawned cars
 
 // ── Rerouting ─────────────────────────────────────────────────────────────────
@@ -301,7 +301,7 @@ export const EXPLOSION_SPARK_WIDTH      = 1.5;      // spark line stroke width
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Lane-path lines drawn over each car's planned trajectory
-export const DEBUG_PATH_COLOR           = 0x00b7ff; // segment path color (bright blue)
+export const DEBUG_PATH_COLOR           = 0x00cc44; // segment path color (green)
 export const DEBUG_PATH_ALPHA           = 1.0;
 export const DEBUG_PATH_SEGMENT_WIDTH   = 2.2; // stroke width on segment paths (screen px, pixelLine)
 export const DEBUG_PATH_CONNECTOR_WIDTH = 2.6; // stroke width on junction connector paths

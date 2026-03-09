@@ -1,7 +1,6 @@
 import { state } from "./state.js";
 import { MAX_DT } from "./config.js";
 import { loadState } from "./persistence.js";
-import { rebuildJunctions } from "./network.js";
 import { importOSMData } from "./osm-import.js";
 import {
   initRenderer,
@@ -9,6 +8,7 @@ import {
   applyCameraTransform,
   drawCars,
   drawDebugRoads,
+  drawSelectedCarRoute,
   setLiteMode,
   setMaplibreMap,
   setOsmParams,
@@ -16,9 +16,11 @@ import {
   fitViewToNetwork,
   updateStatus,
   updatePropertiesPanel,
+  worldToScreen,
 } from "./renderer.js";
 import { BBOX, SCALE } from "./osm-import.js";
 import { updateCars } from "./simulation.js";
+import { pointAtPath } from "./geometry.js";
 
 init().catch(err => {
   console.error(err);
@@ -50,7 +52,6 @@ async function init() {
     // Red ya en localStorage — usar directamente
     statusEl.textContent = "Red cargada desde caché.";
     initCoastline().catch(console.warn);
-    rebuildJunctions();
     fitViewToNetwork();
   } else {
     // Primera carga: importar desde el fixture local
@@ -68,12 +69,38 @@ async function init() {
 
   statusEl.style.display = "none";
 
+  // Detectar click en coches via MapLibre
+  map.on("click", e => {
+    const { x: sx, y: sy } = e.point;
+    const THRESHOLD_PX2 = 25 * 25; // 25px de radio
+    let best = null;
+    let bestDist2 = Infinity;
+    for (const car of state.cars) {
+      const carPos = getCarScreenPos(car);
+      if (!carPos) continue;
+      const dx = carPos.x - sx;
+      const dy = carPos.y - sy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < THRESHOLD_PX2 && d2 < bestDist2) {
+        bestDist2 = d2;
+        best = car;
+      }
+    }
+    state.selectedCarId = best ? best.id : null;
+  });
+
   app.ticker.add(ticker => {
     const dt = Math.min(ticker.deltaMS / 1000, MAX_DT);
     frame(dt);
   });
 }
 
+
+function getCarScreenPos(car) {
+  if (!car.path) return null;
+  const worldPt = pointAtPath(car.path, car.s);
+  return worldToScreen(worldPt.x, worldPt.y);
+}
 
 function frame(dt) {
   if (!state.paused) updateCars(dt);
@@ -82,4 +109,5 @@ function frame(dt) {
   applyCameraTransform();
   drawDebugRoads();
   drawCars();
+  drawSelectedCarRoute();
 }

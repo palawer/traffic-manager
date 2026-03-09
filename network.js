@@ -78,7 +78,7 @@ export function removeNode(nodeId) {
   state.networkDirty = true;
 }
 
-export function addSegment(nodeAId, nodeBId, lanesAtoB = 1, lanesBtoA = 1, speedLimit = 80) {
+export function addSegment(nodeAId, nodeBId, lanesAtoB = 1, lanesBtoA = 1, speedLimit = 80, geometry = null) {
   // Prevent duplicate segment between same two nodes
   for (const seg of state.segments.values()) {
     if ((seg.nodeA === nodeAId && seg.nodeB === nodeBId) ||
@@ -87,7 +87,7 @@ export function addSegment(nodeAId, nodeBId, lanesAtoB = 1, lanesBtoA = 1, speed
     }
   }
   const id = state.nextSegmentId++;
-  state.segments.set(id, { id, nodeA: nodeAId, nodeB: nodeBId, lanesAtoB, lanesBtoA, speedLimit });
+  state.segments.set(id, { id, nodeA: nodeAId, nodeB: nodeBId, lanesAtoB, lanesBtoA, speedLimit, geometry });
   invalidateNodeSegmentsCache();
   state.networkDirty = true;
   return id;

@@ -110,23 +110,10 @@ export function routeToLaneSequence(routeNodeIds) {
     return segmentByPair.get(pairKey(aNodeId, bNodeId)) || null;
   }
 
-  function connectorExists(nodeId, inSegId, inDir, inLane, outSegId, outDir) {
-    const junc = state.junctions.get(nodeId);
-    if (!junc || !junc.connectors || junc.connectors.length === 0) return false;
-    return junc.connectors.some(c =>
-      c.inSegId === inSegId &&
-      c.inDir === inDir &&
-      c.inLane === inLane &&
-      c.outSegId === outSegId &&
-      c.outDir === outDir
-    );
-  }
-
   for (let i = 0; i < routeNodeIds.length - 1; i++) {
     const fromNodeId = routeNodeIds[i];
     const toNodeId = routeNodeIds[i + 1];
 
-    // Find the segment connecting these two nodes
     const seg = findSegmentBetween(fromNodeId, toNodeId);
     if (!seg) continue;
 
@@ -134,43 +121,14 @@ export function routeToLaneSequence(routeNodeIds) {
     const totalLanes = (dir === "AtoB") ? seg.lanesAtoB : seg.lanesBtoA;
     if (totalLanes <= 0) continue;
 
-    // Determine next step segment/direction for connector validation.
-    let nextSeg = null;
-    let nextDir = null;
+    // Prevent U-turn at multi-way intersections
     if (i + 2 < routeNodeIds.length) {
       const nextToNodeId = routeNodeIds[i + 2];
-      // Find the segment after this one
-      nextSeg = findSegmentBetween(toNodeId, nextToNodeId);
-      if (nextSeg) {
-        // No immediate U-turn at intersections, except dead-ends (single connected segment).
-        if (nextSeg.id === seg.id && getNodeSegments(toNodeId).length > 1) return [];
-        nextDir = (nextSeg.nodeA === toNodeId) ? "AtoB" : "BtoA";
-      }
+      const nextSeg = findSegmentBetween(toNodeId, nextToNodeId);
+      if (nextSeg && nextSeg.id === seg.id && getNodeSegments(toNodeId).length > 1) return [];
     }
 
-    // Pick lane based on connector availability.
-    const candidatesConnectorOnly = [];
-
-    for (let lane = 0; lane < totalLanes; lane++) {
-      const connectorOk = !nextSeg || connectorExists(toNodeId, seg.id, dir, lane, nextSeg.id, nextDir);
-
-      if (connectorOk) candidatesConnectorOnly.push(lane);
-    }
-
-    let bestLane = -1;
-    if (candidatesConnectorOnly.length > 0) {
-      // When nextSeg is null, connectorOk is always true so every lane qualifies.
-      bestLane = candidatesConnectorOnly[0];
-    } else {
-      // No lane has a valid connector to the next segment — route is impossible
-      // with the current junction setup. (Unreachable when nextSeg is null since
-      // candidatesConnectorOnly is always non-empty in that case.)
-      return [];
-    }
-
-    bestLane = Math.max(0, Math.min(totalLanes - 1, bestLane));
-
-    sequence.push({ segId: seg.id, dir, laneIdx: bestLane });
+    sequence.push({ segId: seg.id, dir, laneIdx: 0 });
   }
 
   return sequence;
