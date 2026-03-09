@@ -103,6 +103,56 @@ export function buildBezierPolyline(p0, h0, p1, h1, handleLength, steps = 10) {
   return pts;
 }
 
+// --- Quadratic bezier helpers ---
+
+/** Point on a quadratic bezier P0-CP-P1 at parameter t. */
+export function quadraticBezierPoint(p0, cp, p1, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * p0.x + 2 * u * t * cp.x + t * t * p1.x,
+    y: u * u * p0.y + 2 * u * t * cp.y + t * t * p1.y,
+  };
+}
+
+/** Sample a quadratic bezier as a polyline of (steps+1) points. */
+export function sampleQuadraticBezier(p0, cp, p1, steps = 16) {
+  const pts = [];
+  for (let i = 0; i <= steps; i++) pts.push(quadraticBezierPoint(p0, cp, p1, i / steps));
+  return pts;
+}
+
+/**
+ * Tangent heading pointing AWAY from nodeId into the segment (departure direction).
+ * Works for both straight segments and segments with a controlPoint.
+ */
+export function segmentDepartureHeading(seg, nodes, nodeId) {
+  const node = nodes.get(nodeId);
+  if (!node) return 0;
+  if (seg.controlPoint) {
+    return Math.atan2(seg.controlPoint.y - node.y, seg.controlPoint.x - node.x);
+  }
+  const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
+  const other = nodes.get(otherId);
+  if (!other) return 0;
+  return Math.atan2(other.y - node.y, other.x - node.x);
+}
+
+/**
+ * Tangent heading pointing TOWARD nodeId from the segment (arrival direction).
+ * Works for both straight segments and segments with a controlPoint.
+ */
+export function segmentArrivalHeading(seg, nodes, nodeId) {
+  const node = nodes.get(nodeId);
+  if (!node) return 0;
+  if (seg.controlPoint) {
+    return Math.atan2(node.y - seg.controlPoint.y, node.x - seg.controlPoint.x);
+  }
+  const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
+  const other = nodes.get(otherId);
+  if (!other) return 0;
+  return Math.atan2(node.y - other.y, node.x - other.x);
+}
+
 // --- New functions for node+segment model ---
 
 /**
@@ -134,63 +184,25 @@ export function laneEndpointWorld(seg, nodes, allSegsAtNode, nodeId, laneIdx, di
   const other = nodes.get(otherNodeId);
   if (!node || !other) return null;
 
-  // heading INTO the junction (from other toward node)
-  const headingIn = Math.atan2(node.y - other.y, node.x - other.x);
+  // Local tangent heading arriving at nodeId (handles straight and curved segments).
+  // headingIn encodes the direction of travel, so right-of-headingIn is always the
+  // correct lane side: right-of-arrival for AtoB at nodeB, right-of-reverse for BtoA at nodeA.
+  const headingIn = segmentArrivalHeading(seg, nodes, nodeId);
 
   const inset = junctionInset(seg, allSegsAtNode);
-  // stop-line position along road
   const sx = node.x - Math.cos(headingIn) * inset;
   const sy = node.y - Math.sin(headingIn) * inset;
 
-  // right normal of headingIn
-  const nx = -Math.sin(headingIn);
-  const ny = Math.cos(headingIn);
-
-  // For AtoB: lanes are on right side of the road (positive right normal offset from center)
-  // For BtoA: lanes are on left side (negative right normal = toward left)
-  // Lane 0 = outermost (curb side), Lane N-1 = center-adjacent
-  // Center divider is at offset 0 from centerline
-  // AtoB lanes occupy [0, lanesAtoB * LANE_WIDTH] on the right
-  // BtoA lanes occupy [0, lanesBtoA * LANE_WIDTH] on the left
-  // So for AtoB: lateral = +(laneIdx + 0.5) * LANE_WIDTH from center
-  //    for BtoA: lateral = -(laneIdx + 0.5) * LANE_WIDTH from center
-
-  const sign = (dir === "AtoB") ? 1 : -1;
-  // But we need to account for which end of the segment we're at.
-  // If we're at nodeB end, AtoB traffic is ARRIVING (so headingIn already points toward nodeB)
-  // If we're at nodeA end, BtoA traffic is ARRIVING
-  // The lateral offset is: right of the travel direction
-  // Travel direction for AtoB traffic arriving at nodeB: headingIn (from A toward B)
-  // Travel direction for BtoA traffic arriving at nodeA: headingIn reversed = opposite of A→B
-
-  // Actually: headingIn = direction from other toward nodeId
-  // For AtoB arriving at nodeB: headingIn = A→B direction. Right offset = positive nx,ny above
-  // For AtoB leaving nodeA: that's BtoA arriving at nodeA from B side — handled by dir param
-
-  // Correct formula: lateralOff = sign * (laneIdx + 0.5) * LANE_WIDTH
-  // where sign depends on which side of the road this direction occupies
-  // Right-hand traffic: AtoB is on right side of AtoB direction
-  // At nodeB end: AtoB arrives from left→right, its lanes are to the right of the road axis
-  // At nodeA end: the road axis from nodeA perspective is reversed
-
-  // Road axis direction = from nodeA to nodeB
-  const nodeAx = nodes.get(seg.nodeA).x, nodeAy = nodes.get(seg.nodeA).y;
-  const nodeBx = nodes.get(seg.nodeB).x, nodeBy = nodes.get(seg.nodeB).y;
-  const axisHeading = Math.atan2(nodeBy - nodeAy, nodeBx - nodeAx);
-
-  // Right normal of axis (AtoB direction)
-  const axisRightX = -Math.sin(axisHeading);
-  const axisRightY = Math.cos(axisHeading);
-
-  // AtoB lanes: offset = +(laneIdx + 0.5) * LANE_WIDTH in axisRight direction
-  // BtoA lanes: offset = -(laneIdx + 0.5) * LANE_WIDTH in axisRight direction (i.e. left side)
+  const rightX = -Math.sin(headingIn);
+  const rightY =  Math.cos(headingIn);
   const lateralSign = (dir === "AtoB") ? 1 : -1;
-  const lateralOff = lateralSign * (laneIdx + 0.5) * LANE_WIDTH;
+  const lateralOff = (laneIdx + 0.5) * LANE_WIDTH
+    + lateralSign * (seg.lanesBtoA - seg.lanesAtoB) * LANE_WIDTH / 2;
 
   return {
-    x: sx + axisRightX * lateralOff,
-    y: sy + axisRightY * lateralOff,
-    heading: headingIn,  // direction of travel arriving at this node
+    x: sx + rightX * lateralOff,
+    y: sy + rightY * lateralOff,
+    heading: headingIn,
   };
 }
 

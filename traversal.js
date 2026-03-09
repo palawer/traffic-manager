@@ -1,5 +1,5 @@
 import { LANE_WIDTH } from "./state.js";
-import { polylineMetrics, junctionInset, laneEndpointWorld } from "./geometry.js";
+import { polylineMetrics, junctionInset, laneEndpointWorld, buildConnectorBezier, segmentDepartureHeading } from "./geometry.js";
 import { getNodeSegments } from "./network.js";
 
 /**
@@ -20,6 +20,12 @@ export function buildSegmentLanePath(seg, nodes, dir, laneIdx) {
 
   if (!startEp || !endEp) return polylineMetrics([]);
 
+  // Curved segment: build a bezier arc matching the endpoint tangents
+  if (seg.controlPoint) {
+    const pts = buildConnectorBezier(startEp, endEp);
+    return polylineMetrics(pts);
+  }
+
   // Straight segment
   return polylineMetrics([
     { x: startEp.x, y: startEp.y },
@@ -31,28 +37,23 @@ export function buildSegmentLanePath(seg, nodes, dir, laneIdx) {
  * Departure endpoint at nodeId for dir/laneIdx (car leaves nodeId heading away).
  */
 function getDepartureEndpointLocal(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
-  const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
   const node = nodes.get(nodeId);
-  const other = nodes.get(otherId);
-  if (!node || !other) return null;
+  if (!node) return null;
 
-  const headingOut = Math.atan2(other.y - node.y, other.x - node.x);
+  const headingOut = segmentDepartureHeading(seg, nodes, nodeId);
   const inset = junctionInset(seg, segsAtNode);
   const sx = node.x + Math.cos(headingOut) * inset;
   const sy = node.y + Math.sin(headingOut) * inset;
 
-  const nodeA = nodes.get(seg.nodeA);
-  const nodeB = nodes.get(seg.nodeB);
-  if (!nodeA || !nodeB) return null;
-  const axisHeading = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x);
-  const axisRightX = -Math.sin(axisHeading);
-  const axisRightY = Math.cos(axisHeading);
+  const rightX = -Math.sin(headingOut);
+  const rightY =  Math.cos(headingOut);
   const lateralSign = (dir === "AtoB") ? 1 : -1;
-  const lateralOff = lateralSign * (laneIdx + 0.5) * LANE_WIDTH;
+  const lateralOff = (laneIdx + 0.5) * LANE_WIDTH
+    + lateralSign * (seg.lanesBtoA - seg.lanesAtoB) * LANE_WIDTH / 2;
 
   return {
-    x: sx + axisRightX * lateralOff,
-    y: sy + axisRightY * lateralOff,
+    x: sx + rightX * lateralOff,
+    y: sy + rightY * lateralOff,
     heading: headingOut,
   };
 }

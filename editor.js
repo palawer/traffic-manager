@@ -3,6 +3,7 @@ import {
   HIT_NODE, HIT_SEGMENT, HIT_CAR, HIT_CONNECTOR_EP,
   SIGNAL_PHASE_DURATION, SPEED_PRESETS, MAX_LANES,
   ZOOM_SENSITIVITY, ZOOM_MIN, ZOOM_MAX,
+  ROUNDABOUT_RADIUS,
 } from "./config.js";
 import { snap, pointAtPath } from "./geometry.js";
 import { addNode, addSegment, removeNode, removeSegment, markNetworkDirty, rebuildJunctions } from "./network.js";
@@ -190,6 +191,27 @@ function createDefaultSignal(nodeId) {
   });
 }
 
+function placeRoundabout(cx, cy) {
+  const R = ROUNDABOUT_RADIUS;
+  cx = snap(cx); cy = snap(cy);
+  const nN = addNode(cx,     cy - R);
+  const nE = addNode(cx + R, cy    );
+  const nS = addNode(cx,     cy + R);
+  const nW = addNode(cx - R, cy    );
+  // Counter-clockwise in screen coordinates (N→W→S→E→N).
+  // Control points at the bounding-box corners give 90° quadratic bezier arcs.
+  const sNW = addSegment(nN, nW, 1, 0, 50);
+  const sWS = addSegment(nW, nS, 1, 0, 50);
+  const sSE = addSegment(nS, nE, 1, 0, 50);
+  const sEN = addSegment(nE, nN, 1, 0, 50);
+  state.segments.get(sNW).controlPoint = { x: cx - R, y: cy - R };
+  state.segments.get(sWS).controlPoint = { x: cx - R, y: cy + R };
+  state.segments.get(sSE).controlPoint = { x: cx + R, y: cy + R };
+  state.segments.get(sEN).controlPoint = { x: cx + R, y: cy - R };
+  markNetworkDirty();
+  saveState();
+}
+
 export function setupInput() {
   canvas.addEventListener("contextmenu", e => e.preventDefault());
 
@@ -322,6 +344,12 @@ function onPointerDown(e) {
     return;
   }
   state.selectedCarId = null;
+
+  if (state.tool === "roundabout") {
+    placeRoundabout(world.x, world.y);
+    setTool("select");
+    return;
+  }
 
   if (state.tool === "segment") {
     const snapId = snapToNode(world.x, world.y);
@@ -500,6 +528,7 @@ function onKeyDown(e) {
   }
   // Tool shortcuts
   if (e.key === "r" || e.key === "R") setTool("segment");
+  if (e.key === "o" || e.key === "O") setTool("roundabout");
   if (e.key === "s" || e.key === "S") setTool("select");
   if (e.key === "v" || e.key === "V") setTool("speed");
   if (e.key === "t" || e.key === "T") setTool("signal");

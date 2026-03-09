@@ -66,7 +66,7 @@ export function loadState() {
         {
           ...seg,
           lanesAtoB: Math.max(1, seg?.lanesAtoB ?? 1),
-          lanesBtoA: Math.max(1, seg?.lanesBtoA ?? 1),
+          lanesBtoA: Math.max(0, seg?.lanesBtoA ?? 1),
         },
       ])
     );

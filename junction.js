@@ -1,5 +1,5 @@
 import { LANE_WIDTH } from "./state.js";
-import { normalizeAngle, junctionInset, laneEndpointWorld, buildConnectorBezier, polylineMetrics } from "./geometry.js";
+import { normalizeAngle, junctionInset, laneEndpointWorld, buildConnectorBezier, polylineMetrics, segmentDepartureHeading } from "./geometry.js";
 import { STRAIGHT_THRESHOLD } from "./config.js";
 
 /**
@@ -24,29 +24,23 @@ function getArrivalEndpoint(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
  * Get the stop-line endpoint at nodeId for a lane DEPARTING nodeId into seg.
  */
 function getDepartureEndpoint(seg, nodes, segsAtNode, nodeId, laneIdx, dir) {
-  const otherId = seg.nodeA === nodeId ? seg.nodeB : seg.nodeA;
   const node = nodes.get(nodeId);
-  const other = nodes.get(otherId);
-  if (!node || !other) return null;
+  if (!node) return null;
 
-  const headingOut = Math.atan2(other.y - node.y, other.x - node.x);
+  const headingOut = segmentDepartureHeading(seg, nodes, nodeId);
   const inset = junctionInset(seg, segsAtNode);
   const sx = node.x + Math.cos(headingOut) * inset;
   const sy = node.y + Math.sin(headingOut) * inset;
 
-  const nodeA = nodes.get(seg.nodeA);
-  const nodeB = nodes.get(seg.nodeB);
-  if (!nodeA || !nodeB) return null;
-  const axisHeading = Math.atan2(nodeB.y - nodeA.y, nodeB.x - nodeA.x);
-  const axisRightX = -Math.sin(axisHeading);
-  const axisRightY = Math.cos(axisHeading);
-
+  const rightX = -Math.sin(headingOut);
+  const rightY =  Math.cos(headingOut);
   const lateralSign = (dir === "AtoB") ? 1 : -1;
-  const lateralOff = lateralSign * (laneIdx + 0.5) * LANE_WIDTH;
+  const lateralOff = (laneIdx + 0.5) * LANE_WIDTH
+    + lateralSign * (seg.lanesBtoA - seg.lanesAtoB) * LANE_WIDTH / 2;
 
   return {
-    x: sx + axisRightX * lateralOff,
-    y: sy + axisRightY * lateralOff,
+    x: sx + rightX * lateralOff,
+    y: sy + rightY * lateralOff,
     heading: headingOut,
   };
 }
@@ -104,7 +98,7 @@ function buildJunctionPolygon(nodeId, nodes, segsAtNode) {
     const other = nodes.get(otherId);
     if (!other) return null;
 
-    const angle = Math.atan2(other.y - node.y, other.x - node.x);
+    const angle = segmentDepartureHeading(seg, nodes, nodeId);
     const half  = (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH / 2;
     const inset = junctionInset(seg, segsAtNode);
 
