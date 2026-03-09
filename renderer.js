@@ -40,6 +40,7 @@ let camera = null;
 let liteMode = false;
 export function setLiteMode(v) { liteMode = v; }
 let gridGraphics = null;
+let coastlineGraphics = null;
 let junctionGraphics = null;
 let roadsGraphics = null;
 let laneMarkingsGraphics = null;
@@ -70,6 +71,7 @@ export async function initRenderer() {
 
   camera = new PIXI.Container();
   gridGraphics       = new PIXI.Graphics();
+  coastlineGraphics  = new PIXI.Graphics();
   junctionGraphics   = new PIXI.Graphics();
   roadsGraphics      = new PIXI.Graphics();
   laneMarkingsGraphics = new PIXI.Graphics();
@@ -87,6 +89,7 @@ export async function initRenderer() {
   speedLabelsContainer = new PIXI.Container();
 
   camera.addChild(gridGraphics);
+  camera.addChild(coastlineGraphics);
   camera.addChild(junctionGraphics);
   camera.addChild(roadsGraphics);
   camera.addChild(laneMarkingsGraphics);
@@ -136,8 +139,36 @@ export function applyCameraTransform() {
   );
 }
 
+// Color de la línea de costa
+const COASTLINE_COLOR = 0x4a90a4;
+const COASTLINE_WIDTH = 3;        // px de mundo (≈3m — visible a cualquier zoom)
+const COASTLINE_FILL  = 0xd4e8c2; // relleno tierra (verde claro)
+const SEA_COLOR       = 0xb8d4e8; // relleno mar
+
+let coastlineChains = null; // {points, closed}[] — se guarda tras la primera carga
+
+/** Carga la línea de costa y la pinta. Solo dibuja si hay datos. */
+export async function initCoastline() {
+  const { loadCoastline } = await import("./coastline.js");
+  coastlineChains = await loadCoastline();
+  renderCoastline();
+}
+
+function renderCoastline() {
+  coastlineGraphics.clear();
+  if (!coastlineChains) return;
+
+  for (const chain of coastlineChains) {
+    const pts = chain.points;
+    if (pts.length < 2) continue;
+    coastlineGraphics.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) coastlineGraphics.lineTo(pts[i].x, pts[i].y);
+    if (chain.closed) coastlineGraphics.closePath();
+    coastlineGraphics.stroke({ width: COASTLINE_WIDTH, color: COASTLINE_COLOR });
+  }
+}
+
 export function drawGrid() {
-  if (liteMode) { gridGraphics.clear(); return; }
   const min = screenToWorld(0, 0);
   const { width, height } = rendererSize();
   const max = screenToWorld(width, height);

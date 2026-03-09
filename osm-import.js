@@ -6,7 +6,7 @@ import { saveState } from "./persistence.js";
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 
 // Bounding box de Menorca
-const BBOX = {
+export const BBOX = {
   minLat: 39.7800,
   maxLat: 40.1500,
   minLon: 3.8200,
@@ -17,7 +17,7 @@ const BBOX = {
 // 1 grado lat = 111.320 km → SCALE=111320 da exactamente 1 px/m.
 // Con esto LANE_WIDTH=14px ≈ 14m (~4× el ancho real, habitual en simuladores).
 // La isla queda ~43.000px de ancho → usar zoom 0.03–0.1 para verla completa.
-const SCALE = 111320;
+export const SCALE = 111320;
 
 // Velocidades por defecto según tipo de vía (km/h)
 const SPEED_BY_HIGHWAY = {

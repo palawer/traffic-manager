@@ -17,6 +17,7 @@ import {
   drawSignals,
   drawSpeedLabels,
   setLiteMode,
+  initCoastline,
   fitViewToNetwork,
   updateStatus,
   updatePropertiesPanel,
@@ -33,7 +34,10 @@ async function init() {
   const { app } = await initRenderer();
   setupUi();
   if (loadState()) {
-    if (state.nodes.size > 500) setLiteMode(true);
+    if (state.nodes.size > 500) {
+      setLiteMode(true);
+      initCoastline().catch(console.warn);
+    }
     rebuildJunctions();
     fitViewToNetwork();
   }
@@ -59,6 +63,7 @@ function setupImportButton() {
       await importOSM(msg => {
         statusEl.textContent = msg;
       });
+      await initCoastline();
       fitViewToNetwork();
     } catch (err) {
       statusEl.textContent = "Error: " + err.message;
