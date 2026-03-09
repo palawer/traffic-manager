@@ -5,7 +5,6 @@ import {
   CAR_ACCEL, CAR_BRAKE,
   CAR_STOP_DIST, CAR_SLOW_DIST, CAR_SLOW_FACTOR,
   JUNCTION_LOOKAHEAD, JUNCTION_STOP_DIST, JUNCTION_ENTRY_THRESHOLD,
-  CRASH_DIST, EXPLOSION_DURATION, EXPLOSION_SPARKS,
   CAR_BODY_HALF_LENGTH,
   STOP_LINE_CLEARANCE,
   REROUTE_RETRY_INTERVAL, REROUTE_MAX_RETRIES,
@@ -186,7 +185,6 @@ export function updateCars(dt) {
     }
   }
 
-  checkCarCollisions();
   state.cars = state.cars.filter(c => !c.remove);
 
   // Spawn pending cars
@@ -676,31 +674,3 @@ function getCarWorldPos(car) {
   return null;
 }
 
-function checkCarCollisions() {
-  for (let i = 0; i < state.cars.length; i++) {
-    const a = state.cars[i];
-    if (a.remove || a.joinGrace > 0) continue;
-    for (let j = i + 1; j < state.cars.length; j++) {
-      const b = state.cars[j];
-      if (b.remove || b.joinGrace > 0) continue;
-      // Same lane same direction: handled by car-following, skip
-      if (a.phase === "segment" && b.phase === "segment" &&
-          a.segId === b.segId && a.dir === b.dir && a.laneIdx === b.laneIdx) continue;
-      const pa = getCarWorldPos(a);
-      const pb = getCarWorldPos(b);
-      if (!pa || !pb) continue;
-      if (Math.hypot(pa.x - pb.x, pa.y - pb.y) < CRASH_DIST) {
-        a.remove = true;
-        b.remove = true;
-        state.crashes++;
-        const cx = (pa.x + pb.x) / 2;
-        const cy = (pa.y + pb.y) / 2;
-        const sparkAngles = Array.from(
-          { length: EXPLOSION_SPARKS },
-          (_, k) => k * (2 * Math.PI / EXPLOSION_SPARKS) + (Math.random() - 0.5) * 0.5
-        );
-        state.explosions.push({ x: cx, y: cy, age: 0, duration: EXPLOSION_DURATION, sparkAngles });
-      }
-    }
-  }
-}

@@ -8,7 +8,6 @@ import {
   setupUi,
   applyCameraTransform,
   drawCars,
-  drawExplosions,
   setLiteMode,
   setMaplibreMap,
   setOsmParams,
@@ -88,5 +87,4 @@ function frame(dt) {
   updatePropertiesPanel();
   applyCameraTransform();
   drawCars();
-  drawExplosions(dt);
 }
