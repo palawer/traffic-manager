@@ -118,10 +118,18 @@ export function setOsmParams(bbox, scale) { _osmParams = { BBOX: bbox, SCALE: sc
 
 export function applyCameraTransform() {
   if (maplibreMap) {
-    const center = maplibreMap.getCenter();
-    const lat    = center.lat * Math.PI / 180;
-    const zoom   = maplibreMap.getZoom();
-    mapScale = Math.pow(2, zoom) / (156543 * Math.cos(lat));
+    // Compute mapScale empirically: screen px per world px (= screen px per meter N-S).
+    // This avoids the 256 vs 512 tile-size ambiguity in the zoom formula.
+    if (_osmParams.BBOX) {
+      const { BBOX, SCALE } = _osmParams;
+      const cx = (BBOX.minLon + BBOX.maxLon) / 2;
+      const cy = (BBOX.minLat + BBOX.maxLat) / 2;
+      const wx = (cx - BBOX.minLon) * SCALE;
+      const wy = (BBOX.maxLat - cy) * SCALE;
+      const s0 = worldToScreen(wx, wy);
+      const s1 = worldToScreen(wx, wy + 1); // 1 world px south = 1 metre
+      mapScale = Math.hypot(s1.x - s0.x, s1.y - s0.y);
+    }
     camera.scale.set(1);
     camera.position.set(0, 0);
     return;
