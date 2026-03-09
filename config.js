@@ -15,8 +15,7 @@ export const CAR_SLOW_DIST   = 40;  // px
 export const CAR_SLOW_FACTOR = 0.4;
 
 // ── Car spawning ──────────────────────────────────────────────────────────────
-export const SPAWN_CLEARANCE    = 35;
-export const SPAWN_MAX_ATTEMPTS = 6;
+export const SPAWN_MAX_ATTEMPTS = 500;
 export const SPAWN_BATCH        = 10;
 export const SPAWN_GRACE_TIME   = 2;
 

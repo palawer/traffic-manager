@@ -1,12 +1,12 @@
 import { state } from "./state.js";
 import {
-  SPAWN_CLEARANCE, SPAWN_MAX_ATTEMPTS, SPAWN_GRACE_TIME,
+  SPAWN_MAX_ATTEMPTS, SPAWN_GRACE_TIME,
   SPEED_FACTOR_MIN, SPEED_FACTOR_RANGE,
   CAR_ACCEL, CAR_BRAKE,
   CAR_STOP_DIST, CAR_SLOW_DIST, CAR_SLOW_FACTOR,
   REROUTE_RETRY_INTERVAL, REROUTE_MAX_RETRIES,
 } from "./config.js";
-import { pointAtPath, hslToHex } from "./geometry.js";
+import { hslToHex } from "./geometry.js";
 import { getNodeSegments, getDestinationNode } from "./network.js";
 import { findRoute, routeToLaneSequence } from "./router.js";
 import { buildLanePath } from "./traversal.js";
@@ -14,22 +14,18 @@ import { buildLanePath } from "./traversal.js";
 /**
  * Spawn a car at a random segment endpoint with an A* route to another random node.
  */
-export function spawnCar() {
-  const nodeIds = [...state.nodes.keys()];
+// Spawn a car using a pre-shuffled node list (avoids re-shuffling per car).
+export function spawnCar(shuffledNodeIds) {
+  const nodeIds = shuffledNodeIds;
   if (nodeIds.length < 2) return false;
 
-  // Pick a random starting node that has outgoing segments
-  const shuffled = nodeIds.sort(() => Math.random() - 0.5);
   let fromNodeId = null;
-
   let foundRoute = null;
-  for (const nid of shuffled) {
+  for (const nid of nodeIds) {
     const segs = getNodeSegments(nid);
     if (segs.length === 0) continue;
-    // Pick a random destination
-    const candidates = nodeIds.filter(id => id !== nid);
-    if (candidates.length === 0) continue;
-    const dest = candidates[Math.floor(Math.random() * candidates.length)];
+    const dest = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+    if (dest === nid) continue;
     const route = findRoute(nid, dest);
     if (route && route.length >= 2) {
       fromNodeId = nid;
@@ -41,8 +37,6 @@ export function spawnCar() {
   if (fromNodeId === null) return false;
 
   const route = foundRoute;
-  if (!route || route.length < 2) return false;
-
   const laneSeq = routeToLaneSequence(route);
   if (laneSeq.length === 0) return false;
 
@@ -53,12 +47,7 @@ export function spawnCar() {
   const lanePath = buildLanePath(seg, state.nodes, firstStep.dir, firstStep.laneIdx);
   if (!lanePath || lanePath.length < 1) return false;
 
-  // Check spawn point is clear
-  const head = pointAtPath(lanePath, 0);
-  for (const other of state.cars) {
-    const op = pointAtPath(other.path, other.s);
-    if (Math.hypot(op.x - head.x, op.y - head.y) < SPAWN_CLEARANCE) return false;
-  }
+  // No clearance check — spawn grace period handles overlapping at birth
 
   const car = {
     id: Math.random().toString(36).slice(2, 9),
@@ -118,16 +107,14 @@ export function updateCars(dt) {
 
   state.cars = state.cars.filter(c => !c.remove);
 
-  // Spawn pending cars
+  // Spawn pending cars — shuffle once, reuse for all attempts this frame
   if (state.pendingSpawns > 0) {
-    const maxAttempts = SPAWN_MAX_ATTEMPTS;
-    for (let i = 0; i < maxAttempts && state.pendingSpawns > 0; i++) {
-      if (spawnCar()) state.pendingSpawns--;
-    }
-    // If no nodes/segments exist, or no valid route can be generated at all,
-    // clear queue to avoid retrying forever every frame.
-    if (state.nodes.size < 2 || state.segments.size === 0 || !hasAnySpawnRoute()) {
-      state.pendingSpawns = 0;
+    if (state.nodes.size < 2 || state.segments.size === 0) { state.pendingSpawns = 0; return; }
+    const shuffled = [...state.nodes.keys()].sort(() => Math.random() - 0.5);
+    const maxAttempts = Math.min(state.pendingSpawns * 2, SPAWN_MAX_ATTEMPTS);
+    let attempts = 0;
+    while (state.pendingSpawns > 0 && attempts++ < maxAttempts) {
+      if (spawnCar(shuffled)) state.pendingSpawns--;
     }
   }
 }
