@@ -26,6 +26,12 @@
               <circle cx="19" cy="5" r="2.5" class="filled"/>
             </svg>
           </button>
+          <button class="tool-btn" data-tool="roundabout" title="Rotonda (O)">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="8" stroke-width="2.5" fill="none"/>
+              <path class="filled" d="M12 4 L10 7 L12 6 L14 7 Z"/>
+            </svg>
+          </button>
         </div>
       </section>
 
@@ -76,6 +82,14 @@
       </section>
 
       <section>
+        <h2>Red de carreteras</h2>
+        <div class="controls">
+          <button id="importOsmBtn">Importar Menorca (OSM)</button>
+        </div>
+        <p id="importStatus" class="hint" style="display:none"></p>
+      </section>
+
+      <section>
         <h2>Simulación</h2>
         <div class="controls">
           <button id="pauseBtn">⏸ Pausa</button>
@@ -97,6 +111,7 @@
           <li>2º click: finalizar carretera</li>
           <li><strong>T</strong>: semáforos</li>
           <li><strong>C</strong>: conectores de carril</li>
+          <li><strong>O</strong>: rotonda</li>
           <li><strong>V</strong>: límite de velocidad</li>
           <li><strong>P</strong>: pausar / reanudar</li>
           <li><strong>Supr</strong>: borrar seleccionado</li>

@@ -28,6 +28,7 @@ export const LANE_WIDTH     = 14;  // width of one lane in world px
 export const ROAD_WIDTH     = 44;  // legacy compat value (≈ 2 × old lane model)
 export const GRID           = 20;  // editor snap grid size in world px
 export const NODE_SNAP_DIST = 20;  // snap to existing node when closer than this (world px)
+export const ROUNDABOUT_RADIUS = 80; // radius of a roundabout in world px (4 × GRID)
 
 // Junction insets & connector curves
 export const JUNCTION_PADDING     = 4;           // extra clearance beyond road half-width (px)
@@ -354,5 +355,5 @@ export const PREVIEW_SNAP_STROKE   = 2;        // snap-indicator stroke width
 
 // Camera
 export const ZOOM_SENSITIVITY = 0.0012; // wheel delta multiplier
-export const ZOOM_MIN         = 0.2;    // minimum zoom level
+export const ZOOM_MIN         = 0.02;   // minimum zoom level (0.02 permite ver la isla de Menorca completa)
 export const ZOOM_MAX         = 8.0;    // maximum zoom level

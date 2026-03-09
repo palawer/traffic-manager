@@ -2,6 +2,7 @@ import { state } from "./state.js";
 import { MAX_DT } from "./config.js";
 import { loadState } from "./persistence.js";
 import { rebuildJunctions } from "./network.js";
+import { importOSM } from "./osm-import.js";
 import {
   initRenderer,
   setupUi,
@@ -15,6 +16,7 @@ import {
   drawConnectorTool,
   drawSignals,
   drawSpeedLabels,
+  setLiteMode,
   fitViewToNetwork,
   updateStatus,
   updatePropertiesPanel,
@@ -31,14 +33,39 @@ async function init() {
   const { app } = await initRenderer();
   setupUi();
   if (loadState()) {
+    if (state.nodes.size > 500) setLiteMode(true);
     rebuildJunctions();
     fitViewToNetwork();
   }
   setupInput();
+  setupImportButton();
 
   app.ticker.add(ticker => {
     const dt = Math.min(ticker.deltaMS / 1000, MAX_DT);
     frame(dt);
+  });
+}
+
+function setupImportButton() {
+  const btn = document.getElementById("importOsmBtn");
+  const statusEl = document.getElementById("importStatus");
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    statusEl.style.display = "";
+
+    try {
+      setLiteMode(true);
+      await importOSM(msg => {
+        statusEl.textContent = msg;
+      });
+      fitViewToNetwork();
+    } catch (err) {
+      statusEl.textContent = "Error: " + err.message;
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+    }
   });
 }
 

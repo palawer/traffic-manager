@@ -24,8 +24,9 @@ import { SPEED_PRESETS, MAX_LANES, SPAWN_BATCH, EXPLOSION_MAX_RADIUS,
   CONNECTOR_OUT_R, CONNECTOR_OUT_TARGET_R, CONNECTOR_OUT_EXTRA_R, CONNECTOR_OUT_STROKE, CONNECTOR_OUT_STROKE_COLOR,
   CONNECTOR_TARGET_FILL_ALPHA, CONNECTOR_OUT_IDLE_ALPHA, CONNECTOR_IN_R, CONNECTOR_IN_SELECTED_R, CONNECTOR_IN_SELECTED_EXTRA_R, CONNECTOR_SELECTED_HALO_COLOR, CONNECTOR_SELECTED_HALO_WIDTH, CONNECTOR_IN_SELECTED_FILL_COLOR,
   NODE_RADIUS, NODE_RADIUS_SELECTED, SIGNAL_RADIUS, ZOOM_MIN, ZOOM_MAX,
-  SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_TEXT_RESOLUTION, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE, SPEED_SIGN_BORDER_ALPHA, SPEED_SIGN_BG_ALPHA } from "./config.js";
-import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex } from "./geometry.js";
+  SPEED_SIGN_RADIUS, SPEED_SIGN_FONT_SIZE, SPEED_SIGN_TEXT_RESOLUTION, SPEED_SIGN_BORDER_COLOR, SPEED_SIGN_BORDER_SIZE, SPEED_SIGN_BORDER_ALPHA, SPEED_SIGN_BG_ALPHA,
+  ROUNDABOUT_RADIUS } from "./config.js";
+import { pointAtPath, headingAtPath, junctionInset, buildConnectorBezier, hslToHex, snap, sampleQuadraticBezier } from "./geometry.js";
 import { rebuildJunctions, markNetworkDirty, getNodeSegments, findConnector } from "./network.js";
 import { buildLanePath } from "./traversal.js";
 import { saveState } from "./persistence.js";
@@ -33,6 +34,11 @@ import { saveState } from "./persistence.js";
 const app = new PIXI.Application();
 export let canvas = null;
 let camera = null;
+
+// En modo lite se omiten elementos decorativos pesados (nodos, crosswalks,
+// connector paths, speed labels, grid) para redes grandes como la importación OSM.
+let liteMode = false;
+export function setLiteMode(v) { liteMode = v; }
 let gridGraphics = null;
 let junctionGraphics = null;
 let roadsGraphics = null;
@@ -131,6 +137,7 @@ export function applyCameraTransform() {
 }
 
 export function drawGrid() {
+  if (liteMode) { gridGraphics.clear(); return; }
   const min = screenToWorld(0, 0);
   const { width, height } = rendererSize();
   const max = screenToWorld(width, height);
@@ -177,6 +184,19 @@ function segmentInsetPoints(seg) {
     totalWidth: (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH,
     heading: Math.atan2(dy, dx),
   };
+}
+
+/**
+ * For a curved segment (with controlPoint), returns the full arc polyline and width.
+ * No inset clipping: the arc runs from nodeA to nodeB so adjacent arcs meet seamlessly.
+ * Both arcs share the same tangent at each node, so butt caps align into a perfect circle.
+ */
+function segmentCurvedBody(seg) {
+  const nA = state.nodes.get(seg.nodeA);
+  const nB = state.nodes.get(seg.nodeB);
+  if (!nA || !nB || !seg.controlPoint) return null;
+  const pts = sampleQuadraticBezier(nA, seg.controlPoint, nB, 24);
+  return { pts, totalWidth: (seg.lanesAtoB + seg.lanesBtoA) * LANE_WIDTH };
 }
 
 function lerpColorHex(a, b, t) {
@@ -263,12 +283,19 @@ export function drawRoads() {
 
   // Draw segment bodies
   for (const seg of state.segments.values()) {
-    const ip = segmentInsetPoints(seg);
-    if (!ip) continue;
-    const { pA, pB, totalWidth } = ip;
-
-    roadsGraphics.moveTo(pA.x, pA.y).lineTo(pB.x, pB.y);
-    roadsGraphics.stroke({ width: totalWidth, color: COLORS.road, cap: "butt" });
+    if (seg.controlPoint) {
+      const cb = segmentCurvedBody(seg);
+      if (!cb) continue;
+      roadsGraphics.moveTo(cb.pts[0].x, cb.pts[0].y);
+      for (let i = 1; i < cb.pts.length; i++) roadsGraphics.lineTo(cb.pts[i].x, cb.pts[i].y);
+      roadsGraphics.stroke({ width: cb.totalWidth, color: COLORS.road, cap: "butt", join: "round" });
+    } else {
+      const ip = segmentInsetPoints(seg);
+      if (!ip) continue;
+      const { pA, pB, totalWidth } = ip;
+      roadsGraphics.moveTo(pA.x, pA.y).lineTo(pB.x, pB.y);
+      roadsGraphics.stroke({ width: totalWidth, color: COLORS.road, cap: "butt" });
+    }
   }
 
   // Round cap on free ends (nodes connected to exactly one segment).
@@ -285,16 +312,26 @@ export function drawRoads() {
   if (state.tool === "speed" && state.hoveredSegId !== null) {
     const hSeg = state.segments.get(state.hoveredSegId);
     if (hSeg) {
-      const hip = segmentInsetPoints(hSeg);
-      if (hip) {
-        roadsGraphics.moveTo(hip.pA.x, hip.pA.y).lineTo(hip.pB.x, hip.pB.y);
-        roadsGraphics.stroke({ width: hip.totalWidth + ROAD_HOVER_STROKE_EXTRA, color: SPEED_LABEL_BG_COLOR, alpha: ROAD_HOVER_ALPHA, cap: "butt" });
+      if (hSeg.controlPoint) {
+        const cb = segmentCurvedBody(hSeg);
+        if (cb) {
+          roadsGraphics.moveTo(cb.pts[0].x, cb.pts[0].y);
+          for (let i = 1; i < cb.pts.length; i++) roadsGraphics.lineTo(cb.pts[i].x, cb.pts[i].y);
+          roadsGraphics.stroke({ width: cb.totalWidth + ROAD_HOVER_STROKE_EXTRA, color: SPEED_LABEL_BG_COLOR, alpha: ROAD_HOVER_ALPHA, cap: "butt", join: "round" });
+        }
+      } else {
+        const hip = segmentInsetPoints(hSeg);
+        if (hip) {
+          roadsGraphics.moveTo(hip.pA.x, hip.pA.y).lineTo(hip.pB.x, hip.pB.y);
+          roadsGraphics.stroke({ width: hip.totalWidth + ROAD_HOVER_STROKE_EXTRA, color: SPEED_LABEL_BG_COLOR, alpha: ROAD_HOVER_ALPHA, cap: "butt" });
+        }
       }
     }
   }
 
-  // Draw lane markings
+  // Draw lane markings (curved segments have no internal markings — single-lane one-way)
   for (const seg of state.segments.values()) {
+    if (seg.controlPoint) continue;
     const ip = segmentInsetPoints(seg);
     if (!ip) continue;
     const { pA, pB, ux, uy, totalWidth, heading } = ip;
@@ -306,8 +343,8 @@ export function drawRoads() {
     // Crosswalks exist at junction ends (nodes with ≠ 2 segments).
     // Lane markings are clipped to the far edge of the crosswalk so they
     // don't run through the zebra stripes.
-    const hasXwalkA = getNodeSegments(seg.nodeA).length !== 2;
-    const hasXwalkB = getNodeSegments(seg.nodeB).length !== 2;
+    const hasXwalkA = !liteMode && getNodeSegments(seg.nodeA).length !== 2;
+    const hasXwalkB = !liteMode && getNodeSegments(seg.nodeB).length !== 2;
     const markClip = CROSSWALK_DEPTH + CROSSWALK_LANE_GAP;
     const clA = hasXwalkA ? { x: pA.x + ux * markClip, y: pA.y + uy * markClip } : pA;
     const clB = hasXwalkB ? { x: pB.x - ux * markClip, y: pB.y - uy * markClip } : pB;
@@ -346,7 +383,7 @@ export function drawRoads() {
   }
 
   // Draw connector paths — skip pass-through nodes (exactly 2 segments).
-  for (const [nodeId, junc] of state.junctions) {
+  if (!liteMode) for (const [nodeId, junc] of state.junctions) {
     if (getNodeSegments(nodeId).length === 2) continue;
     for (const conn of junc.connectors) {
       const pts = conn.path.points;
@@ -365,7 +402,7 @@ export function drawRoads() {
   }
 
   // Draw crosswalks above intersection trajectories, shifted half-depth into the segment.
-  for (const s of pendingStopLines) {
+  if (!liteMode) for (const s of pendingStopLines) {
     const rdx = s.ny, rdy = -s.nx; // road-direction unit vector
     const shift = s.dir * CROSSWALK_DEPTH / 2;
     const pt = { x: s.pt.x + rdx * shift, y: s.pt.y + rdy * shift };
@@ -422,7 +459,7 @@ export function drawRoads() {
   }
 
   // Draw node handles
-  drawNodes();
+  if (!liteMode) drawNodes();
 }
 
 /**
@@ -507,6 +544,20 @@ function drawNodes() {
 
 export function drawPreview() {
   previewGraphics.clear();
+
+  if (state.tool === "roundabout") {
+    const w = screenToWorld(state.lastMouse.x, state.lastMouse.y);
+    const cx = snap(w.x), cy = snap(w.y);
+    const R = ROUNDABOUT_RADIUS;
+    previewGraphics.circle(cx, cy, R);
+    previewGraphics.stroke({ width: LANE_WIDTH, color: COLORS.previewRoad, alpha: PREVIEW_ALPHA, cap: "round" });
+    for (const [nx, ny] of [[cx, cy - R], [cx + R, cy], [cx, cy + R], [cx - R, cy]]) {
+      previewGraphics.circle(nx, ny, 5);
+      previewGraphics.fill({ color: COLORS.previewRoad, alpha: PREVIEW_ALPHA });
+    }
+    return;
+  }
+
   if (!state.drawingSegment) return;
 
   const fromNode = state.nodes.get(state.drawingSegment.fromNodeId);
@@ -1073,6 +1124,7 @@ export function drawLaneArrows() {
 
 export function drawSignals() {
   signalGraphics.clear();
+  if (liteMode) return;
 
   for (const [nodeId, signal] of state.signals) {
     const junc = state.junctions.get(nodeId);
@@ -1116,6 +1168,7 @@ export function drawSignals() {
 }
 
 export function drawSpeedLabels() {
+  if (liteMode) { speedLabelsContainer.removeChildren(); return; }
   const segIds = new Set(state.segments.keys());
 
   // Remove labels for deleted segments
