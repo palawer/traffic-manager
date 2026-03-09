@@ -14,29 +14,19 @@ import { buildLanePath } from "./traversal.js";
 /**
  * Spawn a car at a random segment endpoint with an A* route to another random node.
  */
-// Spawn a car using a pre-shuffled node list (avoids re-shuffling per car).
-export function spawnCar(shuffledNodeIds) {
-  const nodeIds = shuffledNodeIds;
+// Spawn a car: pick a random node from the list, try a random destination.
+// Returns false if this attempt fails — caller retries with another random pick.
+export function spawnCar(nodeIds) {
   if (nodeIds.length < 2) return false;
 
-  let fromNodeId = null;
-  let foundRoute = null;
-  for (const nid of nodeIds) {
-    const segs = getNodeSegments(nid);
-    if (segs.length === 0) continue;
-    const dest = nodeIds[Math.floor(Math.random() * nodeIds.length)];
-    if (dest === nid) continue;
-    const route = findRoute(nid, dest);
-    if (route && route.length >= 2) {
-      fromNodeId = nid;
-      foundRoute = route;
-      break;
-    }
-  }
+  const nid = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+  if (getNodeSegments(nid).length === 0) return false;
 
-  if (fromNodeId === null) return false;
+  const dest = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+  if (dest === nid) return false;
 
-  const route = foundRoute;
+  if (!route || route.length < 2) return false;
+
   const laneSeq = routeToLaneSequence(route);
   if (laneSeq.length === 0) return false;
 
@@ -112,11 +102,11 @@ export function updateCars(dt) {
   // Spawn pending cars — shuffle once, reuse for all attempts this frame
   if (state.pendingSpawns > 0) {
     if (state.nodes.size < 2 || state.segments.size === 0) { state.pendingSpawns = 0; return; }
-    const shuffled = [...state.nodes.keys()].sort(() => Math.random() - 0.5);
-    const maxAttempts = Math.min(state.pendingSpawns * 2, SPAWN_MAX_ATTEMPTS);
+    const nodeIds = [...state.nodes.keys()];
+    const maxAttempts = Math.min(state.pendingSpawns * 3, SPAWN_MAX_ATTEMPTS);
     let attempts = 0;
     while (state.pendingSpawns > 0 && attempts++ < maxAttempts) {
-      if (spawnCar(shuffled)) state.pendingSpawns--;
+      if (spawnCar(nodeIds)) state.pendingSpawns--;
     }
   }
 }
