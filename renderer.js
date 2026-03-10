@@ -35,8 +35,15 @@ let selectionGraphics = null;
 let routeLabelContainer = null;
 
 let carTexture = null;
-const _carParticles = new Map(); // car.id → PIXI.Particle
-const _particlePool = [];
+const _carParticles = new Map(); // id → PIXI.Sprite
+const _particlePool  = [];
+const _carRenderH    = new Map(); // id → ángulo suavizado
+
+// Último frame de simulación recibido del worker
+let _renderFrame = { carCount: 0, pendingSpawns: 0, positions: null, ids: null, colors: null, graces: null, selectedCar: null };
+
+export function setRenderFrame(data) { _renderFrame = data; }
+export function getLastRenderFrame() { return _renderFrame; }
 
 export async function initRenderer() {
   const stageEl  = document.getElementById("pixi-canvas");
@@ -206,7 +213,7 @@ export function drawSelectedCarRoute() {
   routePinGraphics.clear();
   routeLabelContainer.removeChildren();
   if (state.selectedCarId === null) return;
-  const car = state.cars.find(c => c.id === state.selectedCarId);
+  const car = _renderFrame.selectedCar;
   if (!car) { state.selectedCarId = null; return; }
 
   const color = car.color;
@@ -313,55 +320,59 @@ export function drawSelectedCarRoute() {
 export function drawCars() {
   selectionGraphics.clear();
 
+  const { positions, ids, colors, graces, carCount } = _renderFrame;
+  if (!positions || carCount === 0) {
+    for (const [, sprite] of _carParticles) particleContainer.removeChild(sprite);
+    _carParticles.clear();
+    _carRenderH.clear();
+    return;
+  }
+
   const scaleX = maplibreMap ? Math.max(1.5, CAR_BODY_HALF_LENGTH * mapScale) / CAR_BODY_HALF_LENGTH : 1;
   const scaleY = maplibreMap ? Math.max(1.0, CAR_BODY_HALF_WIDTH  * mapScale) / CAR_BODY_HALF_WIDTH  : 1;
   const selR   = maplibreMap ? Math.max(4, CAR_SELECTION_RADIUS * mapScale) : CAR_SELECTION_RADIUS;
 
-  // Remove particles for cars that no longer exist
-  const currentIds = new Set(state.cars.map(c => c.id));
-  for (const [id, particle] of _carParticles) {
+  // Eliminar sprites de coches que ya no existen
+  const currentIds = new Set();
+  for (let i = 0; i < carCount; i++) currentIds.add(ids[i]);
+  for (const [id, sprite] of _carParticles) {
     if (!currentIds.has(id)) {
-      particleContainer.removeChild(particle);
-      _particlePool.push(particle);
+      particleContainer.removeChild(sprite);
+      _particlePool.push(sprite);
       _carParticles.delete(id);
+      _carRenderH.delete(id);
     }
   }
 
-  for (const car of state.cars) {
-    // Inline pose — reduce pointAtPath calls from 4 a 2 por coche
-    const wp     = pointAtPath(car.path, car.s);
-    const aheadS = Math.min(car.s + 2, car.path.length - 0.001);
-    const aheadW = pointAtPath(car.path, aheadS);
-    const p      = worldToScreen(wp.x, wp.y);
-    const aheadP = worldToScreen(aheadW.x, aheadW.y);
-    const dx = aheadP.x - p.x, dy = aheadP.y - p.y;
-    let h = (dx * dx + dy * dy > 0.1) ? Math.atan2(dy, dx) : Math.atan2(aheadW.y - wp.y, aheadW.x - wp.x);
+  for (let i = 0; i < carCount; i++) {
+    const id    = ids[i];
+    const rawH  = positions[i * 3 + 2];
+    const p     = worldToScreen(positions[i * 3], positions[i * 3 + 1]);
 
-    if (car._renderH === undefined) car._renderH = h;
-    let diff = h - car._renderH;
+    // Suavizar ángulo de rotación en el hilo de render
+    let h = _carRenderH.get(id);
+    if (h === undefined) h = rawH;
+    let diff = rawH - h;
     while (diff >  Math.PI) diff -= 2 * Math.PI;
     while (diff < -Math.PI) diff += 2 * Math.PI;
-    car._renderH += diff * 0.25;
+    _carRenderH.set(id, h + diff * 0.25);
 
-    // Acquire or reuse sprite
-    let particle = _carParticles.get(car.id);
-    if (!particle) {
-      particle = _particlePool.pop();
-      if (!particle) {
-        particle = new PIXI.Sprite(carTexture);
-        particle.anchor.set(0.5);
-      }
-      particleContainer.addChild(particle);
-      _carParticles.set(car.id, particle);
+    let sprite = _carParticles.get(id);
+    if (!sprite) {
+      sprite = _particlePool.pop() ?? new PIXI.Sprite(carTexture);
+      sprite.anchor.set(0.5);
+      particleContainer.addChild(sprite);
+      _carParticles.set(id, sprite);
     }
 
-    particle.x        = p.x;
-    particle.y        = p.y;
-    particle.rotation = car._renderH;
-    particle.scale.set(scaleX, scaleY);
-    particle.tint     = car.color;
+    sprite.x        = p.x;
+    sprite.y        = p.y;
+    sprite.rotation = h + diff * 0.25;
+    sprite.scale.set(scaleX, scaleY);
+    sprite.tint     = colors[i];
+    sprite.alpha    = graces[i] ? 0.45 : 1.0;
 
-    if (car.id === state.selectedCarId) {
+    if (id === state.selectedCarId) {
       selectionGraphics.circle(p.x, p.y, selR);
       selectionGraphics.stroke({ width: CAR_SELECTION_STROKE, color: SPEED_LABEL_BG_COLOR, alpha: CAR_SELECTION_ALPHA });
     }
@@ -373,12 +384,13 @@ export function updatePropertiesPanel() {}
 export function updateStatus() {
   updateSpawnButtonLabel();
   const statusEl = document.getElementById("status");
-  statusEl.textContent = `Coches: ${state.cars.length + state.pendingSpawns} · Segmentos: ${state.segments.size}`;
+  const { carCount, pendingSpawns } = _renderFrame;
+  statusEl.textContent = `Coches: ${carCount + pendingSpawns} · Segmentos: ${state.segments.size}`;
 }
 
 export function updateSpawnButtonLabel() {
   const btn = document.getElementById("spawnCarBtn");
-  if (btn) btn.textContent = `Spawn coche (${state.cars.length}) [+${state.pendingSpawns}]`;
+  if (btn) btn.textContent = `Spawn coche (${_renderFrame.carCount}) [+${_renderFrame.pendingSpawns + state.pendingSpawns}]`;
 }
 
 export function setupUi() {
@@ -409,8 +421,8 @@ export function setupUi() {
   debugLanesBtn.classList.toggle("active", state.debugLanes);
 
   clearCarsBtn.addEventListener("click", () => {
-    state.cars = [];
     state.pendingSpawns = 0;
+    document.dispatchEvent(new CustomEvent("sim:clearCars"));
     updateSpawnButtonLabel();
   });
 }

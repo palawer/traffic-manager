@@ -15,10 +15,13 @@ import {
   updateStatus,
   updatePropertiesPanel,
   worldToScreen,
+  setRenderFrame,
+  getLastRenderFrame,
 } from "./renderer.js";
 import { BBOX, SCALE } from "./osm-import.js";
-import { updateCars, initSimulationCaches } from "./simulation.js";
-import { pointAtPath } from "./geometry.js";
+import { initLanePathCache } from "./traversal.js";
+
+let simWorker = null;
 
 init().catch(err => {
   console.error(err);
@@ -43,6 +46,17 @@ async function init() {
   const { app } = await initRenderer();
   setupUi();
 
+  // Crear worker de simulación
+  simWorker = new Worker("./simulation-worker.js", { type: "module" });
+  simWorker.onmessage = ({ data }) => {
+    if (data.type === "frame") setRenderFrame(data);
+  };
+
+  // Reenviar "limpiar coches" al worker
+  document.addEventListener("sim:clearCars", () => {
+    simWorker?.postMessage({ type: "clearCars" });
+  });
+
   const statusEl = document.getElementById("importStatus");
   statusEl.style.display = "";
 
@@ -50,7 +64,19 @@ async function init() {
     const res  = await fetch("./fixtures/menorca-sample.json");
     const data = await res.json();
     await importOSMData(data, msg => { statusEl.textContent = msg; });
-    initSimulationCaches();
+
+    // Cache de paths en el hilo principal (para dibujar rutas del coche seleccionado)
+    initLanePathCache(state.segments, state.nodes);
+
+    // Enviar la red al worker para que inicialice sus propias caches
+    simWorker.postMessage({
+      type: "init",
+      nodes:          [...state.nodes],
+      segments:       [...state.segments],
+      nextNodeId:     state.nextNodeId,
+      nextSegmentId:  state.nextSegmentId,
+    });
+
     fitViewToNetwork();
   } catch (err) {
     statusEl.textContent = "Error cargando red: " + err.message;
@@ -62,21 +88,17 @@ async function init() {
   // Detectar click en coches via MapLibre
   map.on("click", e => {
     const { x: sx, y: sy } = e.point;
-    const THRESHOLD_PX2 = 25 * 25; // 25px de radio
-    let best = null;
-    let bestDist2 = Infinity;
-    for (const car of state.cars) {
-      const carPos = getCarScreenPos(car);
-      if (!carPos) continue;
-      const dx = carPos.x - sx;
-      const dy = carPos.y - sy;
+    const THRESHOLD_PX2 = 25 * 25;
+    const { positions, ids, carCount } = getLastRenderFrame();
+    if (!positions) return;
+    let best = null, bestDist2 = Infinity;
+    for (let i = 0; i < carCount; i++) {
+      const sp = worldToScreen(positions[i * 3], positions[i * 3 + 1]);
+      const dx = sp.x - sx, dy = sp.y - sy;
       const d2 = dx * dx + dy * dy;
-      if (d2 < THRESHOLD_PX2 && d2 < bestDist2) {
-        bestDist2 = d2;
-        best = car;
-      }
+      if (d2 < THRESHOLD_PX2 && d2 < bestDist2) { bestDist2 = d2; best = ids[i]; }
     }
-    state.selectedCarId = best ? best.id : null;
+    state.selectedCarId = best ?? null;
   });
 
   app.ticker.add(ticker => {
@@ -85,15 +107,17 @@ async function init() {
   });
 }
 
-
-function getCarScreenPos(car) {
-  if (!car.path) return null;
-  const worldPt = pointAtPath(car.path, car.s);
-  return worldToScreen(worldPt.x, worldPt.y);
-}
-
 function frame(dt) {
-  if (!state.paused) updateCars(dt);
+  // Enviar tick al worker (fire-and-forget; los pendingSpawns se transfieren)
+  simWorker?.postMessage({
+    type: "tick",
+    dt,
+    paused:        state.paused,
+    addSpawns:     state.pendingSpawns,
+    selectedCarId: state.selectedCarId,
+  });
+  state.pendingSpawns = 0;
+
   updateStatus();
   updatePropertiesPanel();
   applyCameraTransform();
