@@ -25,7 +25,7 @@ export function initSimulationCaches() {
  */
 // Spawn a car: pick a random node from the list, try a random destination.
 // Returns false if this attempt fails — caller retries with another random pick.
-export function spawnCar() {
+export function spawnCar(laneIndex) {
   const nodes = _spawnableNodes;
   if (!nodes || nodes.length < 2) return false;
 
@@ -44,6 +44,13 @@ export function spawnCar() {
 
   const lanePath = buildLanePath(seg, state.nodes, firstStep.dir, firstStep.laneIdx);
   if (!lanePath || lanePath.length < 1) return false;
+
+  // Rechazar si ya hay un coche cerca del inicio del carril
+  if (laneIndex) {
+    const key = firstStep.segId * 8 + (firstStep.dir === "AtoB" ? 0 : 4) + firstStep.laneIdx;
+    const lane = laneIndex.get(key);
+    if (lane && lane.length > 0 && lane[0].s < CAR_SLOW_DIST) return false;
+  }
 
   const spawnSpeed = seg.speedLimit * (SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE);
 
@@ -113,8 +120,10 @@ export function updateCars(dt) {
     if (!_spawnableNodes || _spawnableNodes.length < 2) { state.pendingSpawns = 0; return; }
     const maxAttempts = Math.min(state.pendingSpawns * 3, SPAWN_MAX_ATTEMPTS);
     let attempts = 0;
+    // Reconstruir índice tras filtrar los coches eliminados
+    const spawnIndex = buildLaneIndex(state.cars);
     while (state.pendingSpawns > 0 && attempts++ < maxAttempts) {
-      if (spawnCar()) state.pendingSpawns--;
+      if (spawnCar(spawnIndex)) state.pendingSpawns--;
     }
   }
 }
