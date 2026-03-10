@@ -8,28 +8,35 @@ import {
 } from "./config.js";
 import { hslToHex } from "./geometry.js";
 import { getNodeSegments, getDestinationNode } from "./network.js";
-import { findRoute, routeToLaneSequence } from "./router.js";
-import { buildLanePath } from "./traversal.js";
+import { cachedRoute, initRouterCache } from "./router.js";
+import { buildLanePath, initLanePathCache } from "./traversal.js";
+
+let _spawnableNodes = null;
+
+/** Inicializar caches estáticos. Llamar una vez tras cargar la red OSM. */
+export function initSimulationCaches() {
+  initLanePathCache(state.segments, state.nodes);
+  initRouterCache();
+  _spawnableNodes = [...state.nodes.keys()].filter(id => getNodeSegments(id).length > 0);
+}
 
 /**
  * Spawn a car at a random segment endpoint with an A* route to another random node.
  */
 // Spawn a car: pick a random node from the list, try a random destination.
 // Returns false if this attempt fails — caller retries with another random pick.
-export function spawnCar(nodeIds) {
-  if (nodeIds.length < 2) return false;
+export function spawnCar() {
+  const nodes = _spawnableNodes;
+  if (!nodes || nodes.length < 2) return false;
 
-  const nid = nodeIds[Math.floor(Math.random() * nodeIds.length)];
-  if (getNodeSegments(nid).length === 0) return false;
-
-  const dest = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+  const nid  = nodes[Math.floor(Math.random() * nodes.length)];
+  const dest = nodes[Math.floor(Math.random() * nodes.length)];
   if (dest === nid) return false;
 
-  const route = findRoute(nid, dest);
-  if (!route || route.length < 2) return false;
+  const cached = cachedRoute(nid, dest);
+  if (!cached) return false;
 
-  const laneSeq = routeToLaneSequence(route);
-  if (laneSeq.length === 0) return false;
+  const { route, laneSeq } = cached;
 
   const firstStep = laneSeq[0];
   const seg = state.segments.get(firstStep.segId);
@@ -103,12 +110,11 @@ export function updateCars(dt) {
 
   // Spawn pending cars — shuffle once, reuse for all attempts this frame
   if (state.pendingSpawns > 0) {
-    if (state.nodes.size < 2 || state.segments.size === 0) { state.pendingSpawns = 0; return; }
-    const nodeIds = [...state.nodes.keys()];
+    if (!_spawnableNodes || _spawnableNodes.length < 2) { state.pendingSpawns = 0; return; }
     const maxAttempts = Math.min(state.pendingSpawns * 3, SPAWN_MAX_ATTEMPTS);
     let attempts = 0;
     while (state.pendingSpawns > 0 && attempts++ < maxAttempts) {
-      if (spawnCar(nodeIds)) state.pendingSpawns--;
+      if (spawnCar()) state.pendingSpawns--;
     }
   }
 }
@@ -245,18 +251,16 @@ function advanceRouteStep(car) {
  * Returns false if no reachable destination exists.
  */
 function rerouteFrom(car, fromNodeId) {
-  const nodeIds = [...state.nodes.keys()];
-  const candidates = nodeIds.filter(id => id !== fromNodeId);
-  if (candidates.length === 0) return false;
+  const nodes = _spawnableNodes;
+  if (!nodes || nodes.length < 2) return false;
 
-  // Try random destinations until a valid route is found
-  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
-  for (const toNodeId of shuffled) {
-    const route = findRoute(fromNodeId, toNodeId);
-    if (!route || route.length < 2) continue;
-    const laneSeq = routeToLaneSequence(route);
-    if (laneSeq.length === 0) continue;
-    // Prevent immediate U-turn at multi-way intersections
+  // Try a few random destinations using the route cache
+  for (let i = 0; i < 8; i++) {
+    const toNodeId = nodes[Math.floor(Math.random() * nodes.length)];
+    if (toNodeId === fromNodeId) continue;
+    const cached = cachedRoute(fromNodeId, toNodeId);
+    if (!cached) continue;
+    const { route, laneSeq } = cached;
     const firstStep = laneSeq[0];
     if (firstStep.segId === car.segId && getNodeSegments(fromNodeId).length > 1) continue;
     car.route = route;

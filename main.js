@@ -17,7 +17,7 @@ import {
   worldToScreen,
 } from "./renderer.js";
 import { BBOX, SCALE } from "./osm-import.js";
-import { updateCars } from "./simulation.js";
+import { updateCars, initSimulationCaches } from "./simulation.js";
 import { pointAtPath } from "./geometry.js";
 
 init().catch(err => {
@@ -50,6 +50,7 @@ async function init() {
     const res  = await fetch("./fixtures/menorca-sample.json");
     const data = await res.json();
     await importOSMData(data, msg => { statusEl.textContent = msg; });
+    initSimulationCaches();
     fitViewToNetwork();
   } catch (err) {
     statusEl.textContent = "Error cargando red: " + err.message;
