@@ -126,22 +126,30 @@ export function setOsmParams(bbox, scale) { _osmParams = { BBOX: bbox, SCALE: sc
 
 export function applyCameraTransform() {
   if (maplibreMap) {
-    // Derivar transformación afín completa desde 3 llamadas project().
-    // Esto reemplaza el cálculo por coche — ~360k llamadas/frame evitadas.
+    // Derivar transformación afín desde 3 llamadas project().
+    // Centrada en el viewport actual para minimizar el error de aproximación lineal.
+    // Paso de 0.01° (~1.1 km) para buena precisión numérica.
     if (_osmParams.BBOX) {
       const { BBOX, SCALE } = _osmParams;
-      const p00 = maplibreMap.project([BBOX.minLon, BBOX.maxLat]);
-      const p10 = maplibreMap.project([BBOX.minLon + 1 / SCALE, BBOX.maxLat]);
-      const p01 = maplibreMap.project([BBOX.minLon, BBOX.maxLat - 1 / SCALE]);
+      const center = maplibreMap.getCenter();
+      const refLon = center.lng;
+      const refLat = center.lat;
+      const refWx  = (refLon - BBOX.minLon) * SCALE;
+      const refWy  = (BBOX.maxLat - refLat) * SCALE;
+      const dLon = 0.01, dLat = 0.01; // grados — da ~14 px de diferencia a zoom 10
+      const p00 = maplibreMap.project([refLon,        refLat       ]);
+      const p10 = maplibreMap.project([refLon + dLon, refLat       ]);
+      const p01 = maplibreMap.project([refLon,        refLat - dLat]);
+      const kxx = (p10.x - p00.x) / (dLon * SCALE);
+      const kxy = (p01.x - p00.x) / (dLat * SCALE);
+      const kyx = (p10.y - p00.y) / (dLon * SCALE);
+      const kyy = (p01.y - p00.y) / (dLat * SCALE);
       _affine = {
-        kxx: p10.x - p00.x,
-        kxy: p01.x - p00.x,
-        kyx: p10.y - p00.y,
-        kyy: p01.y - p00.y,
-        tx: p00.x,
-        ty: p00.y,
+        kxx, kxy, kyx, kyy,
+        tx: p00.x - kxx * refWx - kxy * refWy,
+        ty: p00.y - kyx * refWx - kyy * refWy,
       };
-      mapScale = Math.hypot(p01.x - p00.x, p01.y - p00.y);
+      mapScale = Math.hypot(p01.x - p00.x, p01.y - p00.y) / (dLat * SCALE);
     }
     camera.scale.set(1);
     camera.position.set(0, 0);
