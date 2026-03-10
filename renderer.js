@@ -268,15 +268,18 @@ export function drawSelectedCarRoute() {
   // Label: distancia y tiempo restantes junto al coche
   if (car.path && car.laneSeq) {
     let remainM = car.path.length - car.s;
+    // Tiempo del segmento actual (usar velocidad real o deseada)
+    let timeSec = remainM / Math.max(car.speed, car.desiredSpeed || 1, 1);
+    // Tiempo de cada segmento futuro usando su propio límite de velocidad
     for (let i = car.routeStep + 1; i < car.laneSeq.length; i++) {
       const step = car.laneSeq[i];
       const seg  = state.segments.get(step.segId);
       if (!seg) continue;
       const p = buildLanePath(seg, state.nodes, step.dir, step.laneIdx);
-      if (p) remainM += p.length;
+      if (!p) continue;
+      remainM += p.length;
+      timeSec += p.length / Math.max(seg.speedLimit * car.speedFactor, 1);
     }
-    const avgSpeed = Math.max(car.speed, car.desiredSpeed || 1, 1);
-    const timeSec  = remainM / avgSpeed;
 
     const distTxt = remainM >= 1000
       ? `${(remainM / 1000).toFixed(1)} km`
@@ -292,7 +295,7 @@ export function drawSelectedCarRoute() {
       : pointAtPath(car.path, car.s);
 
     const label = new PIXI.Text({
-      text: `${distTxt}  ·  ${timeTxt}`,
+      text: `${Math.round(car.speed * 3.6)} km/h  ·  ${distTxt}  ·  ${timeTxt}`,
       style: {
         fontSize: 13,
         fill: 0xffffff,
