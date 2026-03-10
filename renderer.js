@@ -380,7 +380,7 @@ export function drawCars() {
     sprite.rotation = h + diff * 0.25;
     sprite.scale.set(scaleX, scaleY);
     sprite.tint     = colors[i];
-    sprite.alpha    = graces[i] ? 0.45 : 1.0;
+    sprite.alpha    = 1.0;
 
     if (id === state.selectedCarId) {
       selectionGraphics.circle(p.x, p.y, selR);
