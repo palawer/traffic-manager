@@ -10,8 +10,8 @@ export const CAR_ACCEL = 4;  // m/s²
 export const CAR_BRAKE = 7;  // m/s²
 
 // ── Car following ─────────────────────────────────────────────────────────────
-export const CAR_STOP_DIST   = 16;  // px
-export const CAR_SLOW_DIST   = 40;  // px
+export const CAR_STOP_DIST   = 1;   // m
+export const CAR_SLOW_DIST   = 20;  // m
 export const CAR_SLOW_FACTOR = 0.4;
 
 // ── Car spawning ──────────────────────────────────────────────────────────────
