@@ -38,6 +38,11 @@ async function init() {
   });
   await new Promise(resolve => map.once("load", resolve));
 
+  // Silenciar warnings de sprites faltantes del estilo base
+  map.on("styleimagemissing", id => {
+    if (!map.hasImage(id)) map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) });
+  });
+
   // Pasar mapa al renderer y registrar parámetros de proyección OSM
   setMaplibreMap(map);
   setOsmParams(BBOX, SCALE);
