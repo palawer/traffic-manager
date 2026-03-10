@@ -190,6 +190,18 @@ function updateCarOnSegment(car, dt, laneIndex) {
     }
   }
 
+  // Obstáculo cross-segmento: primer coche en el siguiente tramo visto desde este
+  // Evita que los coches se atraviesen al incorporarse en intersecciones
+  let crossObstacleDist = Infinity;
+  if (nextStep) {
+    const nextKey = nextStep.segId * 8 + (nextStep.dir === "AtoB" ? 0 : 4) + nextStep.laneIdx;
+    const nextLane = laneIndex.get(nextKey);
+    if (nextLane && nextLane.length > 0) {
+      crossObstacleDist = remToEnd + nextLane[0].s;
+      if (crossObstacleDist < obstacleDist) obstacleDist = crossObstacleDist;
+    }
+  }
+
   if (obstacleDist < CAR_STOP_DIST) {
     target = 0;
     car.debugBrakeReason = "car_ahead";
@@ -202,9 +214,11 @@ function updateCarOnSegment(car, dt, laneIndex) {
 
   applyAcceleration(car, target, dt);
 
-  // Hard-clamp: never get within CAR_STOP_DIST of the car ahead
+  // Hard-clamp: never get within CAR_STOP_DIST of the car ahead (mismo o siguiente segmento)
   let advance = car.speed * dt;
   if (ahead) advance = Math.min(advance, Math.max(0, ahead.s - car.s - CAR_STOP_DIST));
+  if (crossObstacleDist < Infinity)
+    advance = Math.min(advance, Math.max(0, crossObstacleDist - CAR_STOP_DIST));
   car.s += advance;
 
   if (car.s >= car.path.length) {
