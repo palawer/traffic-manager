@@ -415,6 +415,20 @@ export function setupUi() {
     pauseBtn.classList.toggle("active", state.paused);
   });
 
+  const speedBtns = [
+    { id: "speed1Btn", speed: 1 },
+    { id: "speed2Btn", speed: 2 },
+    { id: "speed3Btn", speed: 3 },
+  ];
+  for (const { id, speed } of speedBtns) {
+    const btn = document.getElementById(id);
+    if (!btn) continue;
+    btn.addEventListener("click", () => {
+      state.simSpeed = speed;
+      speedBtns.forEach(b => document.getElementById(b.id)?.classList.toggle("active", b.speed === speed));
+    });
+  }
+
   spawnCarBtn.addEventListener("click", () => {
     const input = document.getElementById("spawnBatchInput");
     const batch = Math.max(1, parseInt(input?.value) || SPAWN_BATCH);

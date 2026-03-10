@@ -116,7 +116,7 @@ function frame(dt) {
   // Enviar tick al worker (fire-and-forget; los pendingSpawns se transfieren)
   simWorker?.postMessage({
     type: "tick",
-    dt,
+    dt:            dt * state.simSpeed,
     paused:        state.paused,
     addSpawns:     state.pendingSpawns,
     selectedCarId: state.selectedCarId,

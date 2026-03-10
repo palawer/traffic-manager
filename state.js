@@ -10,5 +10,6 @@ export const state = {
   networkDirty: true,
   debugLanes: false,
   paused: false,
+  simSpeed: 1,
   selectedCarId: null,
 };
