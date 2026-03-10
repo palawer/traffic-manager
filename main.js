@@ -93,7 +93,7 @@ async function init() {
     if (!positions) return;
     let best = null, bestDist2 = Infinity;
     for (let i = 0; i < carCount; i++) {
-      const sp = worldToScreen(positions[i * 3], positions[i * 3 + 1]);
+      const sp = worldToScreen(positions[i * 4], positions[i * 4 + 1]);
       const dx = sp.x - sx, dy = sp.y - sy;
       const d2 = dx * dx + dy * dy;
       if (d2 < THRESHOLD_PX2 && d2 < bestDist2) { bestDist2 = d2; best = ids[i]; }
