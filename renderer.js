@@ -345,9 +345,13 @@ export function drawCars() {
   }
 
   for (let i = 0; i < carCount; i++) {
-    const id    = ids[i];
-    const rawH  = positions[i * 3 + 2];
-    const p     = worldToScreen(positions[i * 3], positions[i * 3 + 1]);
+    const id     = ids[i];
+    const p      = worldToScreen(positions[i * 4],     positions[i * 4 + 1]);
+    const aheadP = worldToScreen(positions[i * 4 + 2], positions[i * 4 + 3]);
+    const dx = aheadP.x - p.x, dy = aheadP.y - p.y;
+    // Ángulo en screen-space: compensa anisotropía kxx≠kyy del transform afín
+    const rawH = (dx * dx + dy * dy > 0.01) ? Math.atan2(dy, dx)
+      : (_carRenderH.get(id) ?? 0);
 
     // Suavizar ángulo de rotación en el hilo de render
     let h = _carRenderH.get(id);
