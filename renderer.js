@@ -65,10 +65,11 @@ export async function initRenderer() {
   selectionGraphics   = new PIXI.Graphics();
   routeLabelContainer = new PIXI.Container();
 
-  // Build car texture first (white rounded rect, tinted per car at draw time)
+  // Build car texture: borde negro + relleno blanco (tintado por coche al dibujar)
   const tg = new PIXI.Graphics();
   tg.roundRect(0, 0, CAR_BODY_HALF_LENGTH * 2, CAR_BODY_HALF_WIDTH * 2, CAR_CORNER_RADIUS);
   tg.fill(0xffffff);
+  tg.stroke({ width: 0.4, color: 0x000000 });
   carTexture = app.renderer.generateTexture(tg);
   tg.destroy();
 
