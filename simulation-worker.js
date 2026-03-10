@@ -56,7 +56,8 @@ self.onmessage = ({ data }) => {
 
       self.postMessage(
         { type: "frame", carCount: n, pendingSpawns: state.pendingSpawns,
-          positions, ids, colors, graces, selectedCar },
+          positions, ids, colors, graces, selectedCar,
+          echoSelectedCarId: data.selectedCarId },
         [positions.buffer, ids.buffer, colors.buffer, graces.buffer]
       );
       break;

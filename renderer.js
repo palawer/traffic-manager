@@ -214,7 +214,12 @@ export function drawSelectedCarRoute() {
   routeLabelContainer.removeChildren();
   if (state.selectedCarId === null) return;
   const car = _renderFrame.selectedCar;
-  if (!car) { state.selectedCarId = null; return; }
+  // Solo deseleccionar si el worker confirmó que buscó este ID y no lo encontró
+  // (evita deselección prematura por el delay de 1 frame entre tick y frame)
+  if (!car) {
+    if (_renderFrame.echoSelectedCarId === state.selectedCarId) state.selectedCarId = null;
+    return;
+  }
 
   const color = car.color;
   const glow = ROUTE_GLOW_WIDTH;
