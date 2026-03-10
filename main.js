@@ -36,12 +36,12 @@ async function init() {
     center: [4.075, 39.965],
     zoom: 10,
   });
-  await new Promise(resolve => map.once("load", resolve));
-
-  // Silenciar warnings de sprites faltantes del estilo base
+  // Silenciar warnings de sprites faltantes del estilo base (antes del load)
   map.on("styleimagemissing", id => {
     if (!map.hasImage(id)) map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) });
   });
+
+  await new Promise(resolve => map.once("load", resolve));
 
   // Pasar mapa al renderer y registrar parámetros de proyección OSM
   setMaplibreMap(map);
