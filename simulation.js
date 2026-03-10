@@ -12,12 +12,34 @@ import { cachedRoute, initRouterCache } from "./router.js";
 import { buildLanePath, initLanePathCache } from "./traversal.js";
 
 let _spawnableNodes = null;
+let _nodeWeightsCumulative = null; // cumulative weights for weighted random pick
 
 /** Inicializar caches estáticos. Llamar una vez tras cargar la red OSM. */
 export function initSimulationCaches() {
   initLanePathCache(state.segments, state.nodes);
   initRouterCache();
   _spawnableNodes = [...state.nodes.keys()].filter(id => getNodeSegments(id).length > 0);
+  // Pesos proporcionales al grado del nodo (nº de segmentos conectados).
+  // Los nodos en intersecciones principales tienen más probabilidad de ser destino,
+  // concentrando el tráfico en arterias en lugar de callejones residenciales.
+  let cumulative = 0;
+  _nodeWeightsCumulative = _spawnableNodes.map(id => {
+    cumulative += getNodeSegments(id).length;
+    return cumulative;
+  });
+}
+
+/** Elige un nodo aleatorio ponderado por grado. O(log n) via búsqueda binaria. */
+function weightedRandomNode() {
+  const total = _nodeWeightsCumulative[_nodeWeightsCumulative.length - 1];
+  const r = Math.random() * total;
+  let lo = 0, hi = _nodeWeightsCumulative.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (_nodeWeightsCumulative[mid] < r) lo = mid + 1;
+    else hi = mid;
+  }
+  return _spawnableNodes[lo];
 }
 
 /**
@@ -29,8 +51,8 @@ export function spawnCar(laneIndex) {
   const nodes = _spawnableNodes;
   if (!nodes || nodes.length < 2) return false;
 
-  const nid  = nodes[Math.floor(Math.random() * nodes.length)];
-  const dest = nodes[Math.floor(Math.random() * nodes.length)];
+  const nid  = weightedRandomNode();
+  const dest = weightedRandomNode();
   if (dest === nid) return false;
 
   const cached = cachedRoute(nid, dest);
@@ -163,11 +185,11 @@ function updateCarOnSegment(car, dt, laneIndex) {
     }
     // Timer expired — try again
     const rerouteSeg = state.segments.get(car.segId);
-    if (!rerouteSeg) { car.remove = true; return; }
+    if (!rerouteSeg) { respawnCar(car); return; }
     const rerouteDestId = getDestinationNode(rerouteSeg, car.dir);
     if (!rerouteFrom(car, rerouteDestId)) {
       car.reroutePendingRetries++;
-      if (car.reroutePendingRetries >= REROUTE_MAX_RETRIES) { car.remove = true; return; }
+      if (car.reroutePendingRetries >= REROUTE_MAX_RETRIES) { respawnCar(car); return; }
       car.reroutePendingTime = REROUTE_RETRY_INTERVAL;
       car.debugBrakeReason = "reroute_pending";
       return;
@@ -233,7 +255,7 @@ function updateCarOnSegment(car, dt, laneIndex) {
 
   if (car.s >= car.path.length) {
     if (!nextStep) {
-      if (!seg) { car.remove = true; return; }
+      if (!seg) { respawnCar(car); return; }
       const destNodeId = getDestinationNode(seg, car.dir);
       if (!rerouteFrom(car, destNodeId)) {
         car.s = Math.max(0, car.path.length - 1);
@@ -254,19 +276,63 @@ function updateCarOnSegment(car, dt, laneIndex) {
 function advanceRouteStep(car) {
   car.routeStep++;
   if (!car.laneSeq || car.routeStep >= car.laneSeq.length) {
-    car.remove = true;
+    respawnCar(car);
     return;
   }
   const step = car.laneSeq[car.routeStep];
   const seg = state.segments.get(step.segId);
-  if (!seg) { car.remove = true; return; }
+  if (!seg) { respawnCar(car); return; }
   const lanePath = buildLanePath(seg, state.nodes, step.dir, step.laneIdx);
-  if (!lanePath || lanePath.length < 1) { car.remove = true; return; }
+  if (!lanePath || lanePath.length < 1) { respawnCar(car); return; }
   car.segId = step.segId;
   car.dir = step.dir;
   car.laneIdx = step.laneIdx;
   car.path = lanePath;
   car.s = 0;
+}
+
+/**
+ * Teleporta el coche a un nuevo origen aleatorio con una ruta nueva.
+ * Se usa en lugar de eliminar el coche cuando la ruta falla irrecuperablemente.
+ * Mantiene el conteo de coches estable y evita desapariciones visibles.
+ */
+function respawnCar(car) {
+  const nodes = _spawnableNodes;
+  if (!nodes || nodes.length < 2) { car.remove = true; return; }
+
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const nid  = weightedRandomNode();
+    const dest = weightedRandomNode();
+    if (dest === nid) continue;
+
+    const cached = cachedRoute(nid, dest);
+    if (!cached) continue;
+
+    const { route, laneSeq } = cached;
+    const firstStep = laneSeq[0];
+    const seg = state.segments.get(firstStep.segId);
+    if (!seg) continue;
+    const lanePath = buildLanePath(seg, state.nodes, firstStep.dir, firstStep.laneIdx);
+    if (!lanePath || lanePath.length < 1) continue;
+
+    const spawnSpeed = seg.speedLimit * (SPEED_FACTOR_MIN + Math.random() * SPEED_FACTOR_RANGE);
+    car.route      = route;
+    car.laneSeq    = laneSeq;
+    car.routeStep  = 0;
+    car.segId      = firstStep.segId;
+    car.dir        = firstStep.dir;
+    car.laneIdx    = firstStep.laneIdx;
+    car.path       = lanePath;
+    car.s          = 0;
+    car.speed      = spawnSpeed;
+    car.desiredSpeed = spawnSpeed;
+    car.spawnGrace = SPAWN_GRACE_TIME;
+    car.reroutePendingTime    = 0;
+    car.reroutePendingRetries = 0;
+    car.debugBrakeReason = "none";
+    return;
+  }
+  car.remove = true; // red sin rutas válidas — caso extremo
 }
 
 /**
@@ -280,7 +346,7 @@ function rerouteFrom(car, fromNodeId) {
 
   // Try a few random destinations using the route cache
   for (let i = 0; i < 8; i++) {
-    const toNodeId = nodes[Math.floor(Math.random() * nodes.length)];
+    const toNodeId = weightedRandomNode();
     if (toNodeId === fromNodeId) continue;
     const cached = cachedRoute(fromNodeId, toNodeId);
     if (!cached) continue;

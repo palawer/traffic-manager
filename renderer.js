@@ -297,18 +297,20 @@ export function drawSelectedCarRoute() {
     const distTxt = remainM >= 1000
       ? `${(remainM / 1000).toFixed(1)} km`
       : `${Math.round(remainM)} m`;
-    const timeTxt = timeSec >= 3600
-      ? `${Math.floor(timeSec / 3600)}h ${Math.floor((timeSec % 3600) / 60)}min`
-      : timeSec >= 60
-        ? `${Math.floor(timeSec / 60)}min`
-        : `${Math.round(timeSec)}s`;
+    const displaySec = timeSec / state.simSpeed;
+    const timeTxt = displaySec >= 3600
+      ? `${Math.floor(displaySec / 3600)}h ${Math.floor((displaySec % 3600) / 60)}min`
+      : displaySec >= 60
+        ? `${Math.floor(displaySec / 60)}min`
+        : `${Math.round(displaySec)}s`;
 
     const carScreenPos = maplibreMap
       ? worldToScreen(pointAtPath(car.path, car.s).x, pointAtPath(car.path, car.s).y)
       : pointAtPath(car.path, car.s);
 
+    const displaySpeed = Math.round(car.speed * 3.6 * state.simSpeed);
     const label = new PIXI.Text({
-      text: `${Math.round(car.speed * 3.6)} km/h  ·  ${distTxt}  ·  ${timeTxt}`,
+      text: `${displaySpeed} km/h  ·  ${distTxt}  ·  ${timeTxt}`,
       style: {
         fontSize: 13,
         fill: 0xffffff,
