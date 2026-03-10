@@ -221,7 +221,7 @@ export function drawSelectedCarRoute() {
     return;
   }
 
-  const color = car.color;
+  const color = 0x000000;
   const glow = ROUTE_GLOW_WIDTH;
   const thin = ROUTE_LINE_WIDTH;
 
