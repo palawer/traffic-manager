@@ -1,6 +1,6 @@
 import { state } from "./state.js";
 import {
-  SPAWN_MAX_ATTEMPTS, SPAWN_GRACE_TIME,
+  SPAWN_MAX_ATTEMPTS, SPAWN_PER_FRAME, SPAWN_GRACE_TIME,
   SPEED_FACTOR_MIN, SPEED_FACTOR_RANGE,
   CAR_ACCEL, CAR_BRAKE,
   CAR_STOP_DIST, CAR_SLOW_DIST, CAR_SLOW_FACTOR,
@@ -122,8 +122,9 @@ export function updateCars(dt) {
     let attempts = 0;
     // Reconstruir índice tras filtrar los coches eliminados
     const spawnIndex = buildLaneIndex(state.cars);
-    while (state.pendingSpawns > 0 && attempts++ < maxAttempts) {
-      if (spawnCar(spawnIndex)) state.pendingSpawns--;
+    let spawned = 0;
+    while (state.pendingSpawns > 0 && spawned < SPAWN_PER_FRAME && attempts++ < maxAttempts * SPAWN_PER_FRAME) {
+      if (spawnCar(spawnIndex)) { state.pendingSpawns--; spawned++; }
     }
   }
 }

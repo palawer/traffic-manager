@@ -15,7 +15,8 @@ export const CAR_SLOW_DIST   = 20;  // m
 export const CAR_SLOW_FACTOR = 0.4;
 
 // ── Car spawning ──────────────────────────────────────────────────────────────
-export const SPAWN_MAX_ATTEMPTS = 500;
+export const SPAWN_MAX_ATTEMPTS = 30;  // intentos por coche antes de rendirse
+export const SPAWN_PER_FRAME    = 50;  // coches nuevos máximo por frame
 export const SPAWN_BATCH        = 10;
 export const SPAWN_GRACE_TIME   = 2;
 
