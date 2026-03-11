@@ -456,9 +456,11 @@ export function setupUi() {
   });
 
   const speedBtns = [
-    { id: "speed1Btn", speed: 1 },
-    { id: "speed2Btn", speed: 2 },
-    { id: "speed3Btn", speed: 3 },
+    { id: "speed1Btn",  speed: 1  },
+    { id: "speed2Btn",  speed: 2  },
+    { id: "speed3Btn",  speed: 3  },
+    { id: "speed5Btn",  speed: 5  },
+    { id: "speed10Btn", speed: 10 },
   ];
   for (const { id, speed } of speedBtns) {
     const btn = document.getElementById(id);
