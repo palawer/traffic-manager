@@ -12,34 +12,18 @@ import { cachedRoute, initRouterCache } from "./router.js";
 import { buildLanePath, initLanePathCache } from "./traversal.js";
 
 let _spawnableNodes = null;
-let _nodeWeightsCumulative = null; // cumulative weights for weighted random pick
 
 /** Inicializar caches estáticos. Llamar una vez tras cargar la red OSM. */
 export function initSimulationCaches() {
   initLanePathCache(state.segments, state.nodes);
   initRouterCache();
   _spawnableNodes = [...state.nodes.keys()].filter(id => getNodeSegments(id).length > 0);
-  // Pesos proporcionales al grado del nodo (nº de segmentos conectados).
-  // Los nodos en intersecciones principales tienen más probabilidad de ser destino,
-  // concentrando el tráfico en arterias en lugar de callejones residenciales.
-  let cumulative = 0;
-  _nodeWeightsCumulative = _spawnableNodes.map(id => {
-    cumulative += getNodeSegments(id).length;
-    return cumulative;
-  });
 }
 
-/** Elige un nodo aleatorio ponderado por grado. O(log n) via búsqueda binaria. */
-function weightedRandomNode() {
-  const total = _nodeWeightsCumulative[_nodeWeightsCumulative.length - 1];
-  const r = Math.random() * total;
-  let lo = 0, hi = _nodeWeightsCumulative.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (_nodeWeightsCumulative[mid] < r) lo = mid + 1;
-    else hi = mid;
-  }
-  return _spawnableNodes[lo];
+/** Elige un nodo aleatorio uniforme. A* ya concentra el tráfico en arterias
+ *  al elegir rutas más rápidas — no hace falta sesgar también el origen/destino. */
+function randomNode() {
+  return _spawnableNodes[Math.floor(Math.random() * _spawnableNodes.length)];
 }
 
 /**
@@ -51,8 +35,8 @@ export function spawnCar(laneIndex) {
   const nodes = _spawnableNodes;
   if (!nodes || nodes.length < 2) return false;
 
-  const nid  = weightedRandomNode();
-  const dest = weightedRandomNode();
+  const nid  = randomNode();
+  const dest = randomNode();
   if (dest === nid) return false;
 
   const cached = cachedRoute(nid, dest);
@@ -301,8 +285,8 @@ function respawnCar(car) {
   if (!nodes || nodes.length < 2) { car.remove = true; return; }
 
   for (let attempt = 0; attempt < 16; attempt++) {
-    const nid  = weightedRandomNode();
-    const dest = weightedRandomNode();
+    const nid  = randomNode();
+    const dest = randomNode();
     if (dest === nid) continue;
 
     const cached = cachedRoute(nid, dest);
@@ -346,7 +330,7 @@ function rerouteFrom(car, fromNodeId) {
 
   // Try a few random destinations using the route cache
   for (let i = 0; i < 8; i++) {
-    const toNodeId = weightedRandomNode();
+    const toNodeId = randomNode();
     if (toNodeId === fromNodeId) continue;
     const cached = cachedRoute(fromNodeId, toNodeId);
     if (!cached) continue;
