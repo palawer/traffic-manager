@@ -17,6 +17,7 @@ import {
   worldToScreen,
   setRenderFrame,
   getLastRenderFrame,
+  drawCongestionLayer,
 } from "./renderer.js";
 import { BBOX, SCALE } from "./osm-import.js";
 import { initLanePathCache } from "./traversal.js";
@@ -127,6 +128,7 @@ function frame(dt) {
   updatePropertiesPanel();
   applyCameraTransform();
   drawDebugRoads();
+  drawCongestionLayer();
   drawCars();
   drawSelectedCarRoute();
 }

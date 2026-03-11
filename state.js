@@ -9,6 +9,7 @@ export const state = {
   pendingSpawns: 0,
   networkDirty: true,
   debugLanes: false,
+  showCongestion: false,
   paused: false,
   simSpeed: 1,
   selectedCarId: null,

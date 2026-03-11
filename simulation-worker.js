@@ -54,11 +54,30 @@ self.onmessage = ({ data }) => {
         };
       }
 
+      // Congestión por segmento: avgSpeed / speedLimit → 0 (parado) … 1 (fluido)
+      const congMap = new Map();
+      for (const car of state.cars) {
+        let entry = congMap.get(car.segId);
+        if (!entry) {
+          const seg = state.segments.get(car.segId);
+          entry = { sum: 0, count: 0, speedLimit: seg ? seg.speedLimit : 1 };
+          congMap.set(car.segId, entry);
+        }
+        entry.sum += car.speed;
+        entry.count++;
+      }
+      const congestion = new Float32Array(congMap.size * 2);
+      let ci = 0;
+      for (const [segId, { sum, count, speedLimit }] of congMap) {
+        congestion[ci++] = segId;
+        congestion[ci++] = (sum / count) / Math.max(speedLimit, 1);
+      }
+
       self.postMessage(
         { type: "frame", carCount: n, pendingSpawns: state.pendingSpawns,
-          positions, ids, colors, graces, selectedCar,
+          positions, ids, colors, graces, selectedCar, congestion,
           echoSelectedCarId: data.selectedCarId },
-        [positions.buffer, ids.buffer, colors.buffer, graces.buffer]
+        [positions.buffer, ids.buffer, colors.buffer, graces.buffer, congestion.buffer]
       );
       break;
     }

@@ -28,6 +28,7 @@ let mapScale = 1;
 // Caché de transformación afín: evita llamadas project() por coche en cada frame.
 let _affine = null; // { kxx, kxy, kyx, kyy, tx, ty }
 let roadsGraphics = null;
+let congestionGraphics = null;
 let routeGraphics = null;
 let routePinGraphics = null;
 let particleContainer = null;
@@ -76,7 +77,10 @@ export async function initRenderer() {
   // Container for car sprites — PixiJS v8 auto-batches same-texture sprites
   particleContainer = new PIXI.Container();
 
+  congestionGraphics = new PIXI.Graphics();
+
   camera.addChild(roadsGraphics);
+  camera.addChild(congestionGraphics);
   camera.addChild(routeGraphics);
   camera.addChild(particleContainer);
   camera.addChild(selectionGraphics);
@@ -391,6 +395,40 @@ export function drawCars() {
   }
 }
 
+/** Convierte ratio flujo 0–1 en color rojo→amarillo→verde. */
+function congestionColor(ratio) {
+  const t = Math.max(0, Math.min(1, ratio)); // clamp — ratio puede superar 1 al spawnear
+  const r = t < 0.5 ? 255 : Math.round(255 * (1 - (t - 0.5) * 2));
+  const g = t < 0.5 ? Math.round(255 * t * 2) : 255;
+  return (r << 16) | (g << 8);
+}
+
+export function drawCongestionLayer() {
+  congestionGraphics.clear();
+  if (!state.showCongestion) return;
+
+  const { congestion } = _renderFrame;
+  if (!congestion || congestion.length < 2) return;
+
+  for (let i = 0; i < congestion.length; i += 2) {
+    const segId = congestion[i];
+    const ratio = congestion[i + 1];
+    const seg   = state.segments.get(segId);
+    if (!seg) continue;
+
+    const path = buildLanePath(seg, state.nodes, "AtoB", 0);
+    if (!path || path.points.length < 2) continue;
+
+    const p0 = worldToScreen(path.points[0].x, path.points[0].y);
+    congestionGraphics.moveTo(p0.x, p0.y);
+    for (let j = 1; j < path.points.length; j++) {
+      const p = worldToScreen(path.points[j].x, path.points[j].y);
+      congestionGraphics.lineTo(p.x, p.y);
+    }
+    congestionGraphics.stroke({ width: 6, color: congestionColor(ratio), alpha: 0.75 });
+  }
+}
+
 export function updatePropertiesPanel() {}
 
 export function updateStatus() {
@@ -445,6 +483,15 @@ export function setupUi() {
   });
   debugLanesBtn.textContent = `Debug: ${state.debugLanes ? "ON" : "OFF"}`;
   debugLanesBtn.classList.toggle("active", state.debugLanes);
+
+  const congestionBtn = document.getElementById("congestionBtn");
+  if (congestionBtn) {
+    congestionBtn.addEventListener("click", () => {
+      state.showCongestion = !state.showCongestion;
+      congestionBtn.textContent = `Congestión: ${state.showCongestion ? "ON" : "OFF"}`;
+      congestionBtn.classList.toggle("active", state.showCongestion);
+    });
+  }
 
   clearCarsBtn.addEventListener("click", () => {
     state.pendingSpawns = 0;
